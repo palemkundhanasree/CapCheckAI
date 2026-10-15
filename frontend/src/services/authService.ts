@@ -1,3 +1,5 @@
+import { request } from './apiClient';
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -14,11 +16,11 @@ export interface AuthResponse {
 
 export const authService = {
   getToken(): string | null {
-    return localStorage.getItem('truthlens_token');
+    return localStorage.getItem('capcheck_token') || localStorage.getItem('truthlens_token');
   },
 
   getUser(): UserProfile | null {
-    const raw = localStorage.getItem('truthlens_user');
+    const raw = localStorage.getItem('capcheck_user') || localStorage.getItem('truthlens_user');
     if (!raw) return null;
     try {
       return JSON.parse(raw);
@@ -27,79 +29,54 @@ export const authService = {
     }
   },
 
+  isAuthenticated(): boolean {
+    return !!this.getToken();
+  },
+
   setAuth(data: AuthResponse) {
-    localStorage.setItem('truthlens_token', data.access_token);
-    localStorage.setItem('truthlens_user', JSON.stringify(data.user));
+    localStorage.setItem('capcheck_token', data.access_token);
+    localStorage.setItem('capcheck_user', JSON.stringify(data.user));
     window.dispatchEvent(new Event('auth_state_changed'));
   },
 
   logout() {
+    localStorage.removeItem('capcheck_token');
+    localStorage.removeItem('capcheck_user');
     localStorage.removeItem('truthlens_token');
     localStorage.removeItem('truthlens_user');
     window.dispatchEvent(new Event('auth_state_changed'));
   },
 
   async login(identifier: string, password: string): Promise<AuthResponse> {
-    const res = await fetch('/api/v1/auth/login', {
+    const data = await request<AuthResponse>('/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier, password }),
+      body: JSON.stringify({ email: identifier, identifier, password }),
     });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Login failed' }));
-      throw new Error(err.detail || 'Invalid email/username or password');
-    }
-
-    const data: AuthResponse = await res.json();
     this.setAuth(data);
     return data;
   },
 
   async register(name: string, email: string, password: string, username?: string): Promise<AuthResponse> {
-    const res = await fetch('/api/v1/auth/register', {
+    const data = await request<AuthResponse>('/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password, username }),
     });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Registration failed' }));
-      throw new Error(err.detail || 'Registration failed');
-    }
-
-    const data: AuthResponse = await res.json();
     this.setAuth(data);
     return data;
   },
 
   async forgotPassword(email: string): Promise<{ message: string; dev_otp?: string }> {
-    const res = await fetch('/api/v1/auth/forgot-password', {
+    return await request<{ message: string; dev_otp?: string }>('/auth/forgot-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Request failed' }));
-      throw new Error(err.detail || 'Failed to send reset code');
-    }
-
-    return await res.json();
   },
 
   async verifyOtpAndReset(email: string, otp: string, new_password: string): Promise<{ message: string }> {
-    const res = await fetch('/api/v1/auth/verify-otp-reset', {
+    return await request<{ message: string }>('/auth/verify-otp-reset', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, otp, new_password }),
     });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Verification failed' }));
-      throw new Error(err.detail || 'Invalid or expired OTP code');
-    }
-
-    return await res.json();
   }
 };
+

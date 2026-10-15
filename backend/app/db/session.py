@@ -41,10 +41,12 @@ def init_db() -> None:
     # Seed default local demo admin
     db = SessionLocal()
     try:
-        existing_admin = db.query(User).filter((User.username == "admin") | (User.email == "admin@truthlens.ai")).first()
+        existing_admin = db.query(User).filter(
+            (User.username == "admin") | (User.email == "admin@capcheck.ai") | (User.email == "admin@truthlens.ai")
+        ).first()
         if not existing_admin:
             admin_user = User(
-                email="admin@truthlens.ai",
+                email="admin@capcheck.ai",
                 username="admin",
                 name="Administrator",
                 hashed_password=get_password_hash("capcheck123"),
@@ -52,7 +54,10 @@ def init_db() -> None:
             )
             db.add(admin_user)
             db.commit()
-            logger.info("Default local admin created.")
+            logger.info("Default local admin created: admin@capcheck.ai")
+        elif existing_admin.email == "admin@truthlens.ai":
+            existing_admin.email = "admin@capcheck.ai"
+            db.commit()
     except Exception as e:
         logger.error(f"Error seeding default admin user: {e}")
         db.rollback()

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-TruthLens AI - All-in-One Single-Click Application Runner
+CapCheck AI - All-in-One Single-Click Application Runner
 Automatically checks prerequisites, auto-installs missing dependencies,
 initializes the database, starts backend and frontend, and opens the browser.
 """
@@ -24,7 +24,7 @@ VENV_PIP = VENV_DIR / "Scripts" / "pip.exe" if os.name == "nt" else VENV_DIR / "
 
 def print_banner():
     print("=" * 70, flush=True)
-    print("               TruthLens AI - All-in-One Launcher", flush=True)
+    print("               CapCheck AI - All-in-One Launcher", flush=True)
     print("=" * 70, flush=True)
     print(flush=True)
 
@@ -121,7 +121,7 @@ def check_url_live(url, timeout=1.5):
 
 
 def run_services():
-    print("\n[4/5] Launching TruthLens AI Services...", flush=True)
+    print("\n[4/5] Launching CapCheck AI Services...", flush=True)
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(BACKEND_DIR)
@@ -166,12 +166,13 @@ def run_services():
         time.sleep(1.0)
 
     print("\n" + "=" * 70, flush=True)
-    print("            TruthLens AI IS RUNNING SUCCESSFULLY!", flush=True)
+    print("            CapCheck AI IS RUNNING SUCCESSFULLY!", flush=True)
     print("=" * 70, flush=True)
     print("\n  -> Web Application:        http://localhost:5173", flush=True)
     print("  -> Swagger API Docs:       http://127.0.0.1:8000/docs", flush=True)
     print("  -> Health Check:           http://127.0.0.1:8000/api/v1/health", flush=True)
-    print("  -> Default Admin Login:    admin@truthlens.ai / capcheck123", flush=True)
+    print("  -> Default Admin Login:    admin@capcheck.ai / capcheck123", flush=True)
+    print("  -> Strict Verification:    >= 75% Source Verification Required for Real", flush=True)
     print("\nPress Ctrl+C in this window at any time to stop both servers.", flush=True)
     print("=" * 70 + "\n", flush=True)
 

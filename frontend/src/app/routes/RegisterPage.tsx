@@ -42,7 +42,7 @@ export const RegisterPage: React.FC = () => {
           </div>
           <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Create an Account</h2>
           <p className="mt-2 text-sm text-slate-600">
-            Join TruthLens AI to verify claims, upload evidence, and track investigations
+            Join CapCheck AI to verify claims, upload evidence, and track investigations
           </p>
         </div>
 

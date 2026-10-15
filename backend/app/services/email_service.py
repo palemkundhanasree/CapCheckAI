@@ -24,7 +24,7 @@ def send_otp_email(recipient_email: str, otp_code: str, user_name: str = "User")
     If SMTP server is configured in settings or environment, delivers via real SMTP.
     Always logs to storage/email_outbox.log and console for seamless offline/dev testing.
     """
-    subject = f"Your TruthLens AI Password Reset Code: {otp_code}"
+    subject = f"Your CapCheck AI Password Reset Code: {otp_code}"
     
     html_content = f"""
     <!DOCTYPE html>
@@ -42,7 +42,7 @@ def send_otp_email(recipient_email: str, otp_code: str, user_name: str = "User")
     </head>
     <body>
         <div class="container">
-            <div class="brand">TruthLens AI</div>
+            <div class="brand">CapCheck AI</div>
             <p>Hello {user_name},</p>
             <p>You requested a one-time verification code to reset your password. Use the 6-digit code below to complete your reset:</p>
             <div class="otp-box">
@@ -50,7 +50,7 @@ def send_otp_email(recipient_email: str, otp_code: str, user_name: str = "User")
             </div>
             <p>This code is valid for <strong>15 minutes</strong>. If you did not request this code, you can safely ignore this email.</p>
             <div class="footer">
-                &copy; {datetime.utcnow().year} TruthLens AI. Trusted Fact-Checking & Media Verification.
+                &copy; {datetime.utcnow().year} CapCheck AI. Trusted Fact-Checking & Media Verification.
             </div>
         </div>
     </body>
@@ -60,11 +60,11 @@ def send_otp_email(recipient_email: str, otp_code: str, user_name: str = "User")
     plain_content = f"""
     Hello {user_name},
 
-    Your TruthLens AI password reset code is: {otp_code}
+    Your CapCheck AI password reset code is: {otp_code}
     This code is valid for 15 minutes.
 
     If you did not request this, please ignore this email.
-    TruthLens AI Team
+    CapCheck AI Team
     """
 
     # 1. Log to outbox file
@@ -82,13 +82,13 @@ def send_otp_email(recipient_email: str, otp_code: str, user_name: str = "User")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER")
     smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM", "noreply@truthlens.ai")
+    smtp_from = os.getenv("SMTP_FROM", "noreply@capcheck.ai")
 
     if smtp_host and smtp_user and smtp_password:
         try:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = f"TruthLens AI <{smtp_from}>"
+            msg["From"] = f"CapCheck AI <{smtp_from}>"
             msg["To"] = recipient_email
             msg.attach(MIMEText(plain_content, "plain"))
             msg.attach(MIMEText(html_content, "html"))

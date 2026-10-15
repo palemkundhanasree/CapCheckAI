@@ -71,7 +71,7 @@ export const ProcessingProgress: React.FC<ProcessingProgressProps> = ({ jobId, o
           {error ? 'Verification Paused' : job?.status === 'completed' ? 'Verification Complete!' : 'Cross-Referencing Evidence...'}
         </h3>
         <p className="text-xs text-slate-600 mt-1">
-          {error ? error : job?.current_stage || 'Connecting to TruthLens forensics engine...'}
+          {error ? error : job?.current_stage || 'Connecting to CapCheck forensics engine...'}
         </p>
       </div>
 

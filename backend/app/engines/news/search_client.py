@@ -36,6 +36,23 @@ async def search_duckduckgo_knowledge(query: str) -> List[Dict[str, Any]]:
                         "stance": "NEUTRAL",
                         "credibility_score": 92.0
                     })
+
+                # Also extract related internet reference topics
+                for topic in data.get("RelatedTopics", [])[:3]:
+                    text = topic.get("Text", "")
+                    first_url = topic.get("FirstURL", "")
+                    if text and first_url:
+                        rep = lookup_source_reputation(first_url)
+                        results.append({
+                            "title": f"Internet Reference: {text[:60]}...",
+                            "source_name": rep.get("name", "Web Reference"),
+                            "source_url": first_url,
+                            "publisher": rep.get("name", "Public Source"),
+                            "publish_date": "Public Index",
+                            "snippet": text,
+                            "stance": "NEUTRAL",
+                            "credibility_score": rep.get("reliability", 85.0)
+                        })
     except Exception as e:
         logger.debug(f"DuckDuckGo search error: {e}")
 

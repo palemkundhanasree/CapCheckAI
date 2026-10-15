@@ -48,7 +48,7 @@ export const Navbar: React.FC = () => {
           </div>
           <div>
             <span className="text-lg font-bold tracking-tight text-slate-900">
-              TruthLens <span className="text-blue-600">AI</span>
+              CapCheck <span className="text-blue-600">AI</span>
             </span>
             <span className="hidden sm:block text-[11px] text-slate-500 font-medium">
               Fake News & Media Verification Platform

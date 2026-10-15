@@ -11,7 +11,7 @@ export const AboutPage: React.FC = () => {
           <span>Platform Architecture & Methodology</span>
         </div>
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-          How TruthLens AI Verifies the Truth
+          How CapCheck AI Verifies the Truth
         </h1>
         <p className="text-sm text-slate-600 leading-relaxed max-w-2xl">
           An objective, multi-stage verification framework cross-referencing claims against independent factual databases, digital forensic indicators, and source consensus.
@@ -26,7 +26,7 @@ export const AboutPage: React.FC = () => {
             <span>The 3 Pillars of Every Verification</span>
           </h2>
           <p className="text-xs text-slate-600 mt-1">
-            Rather than relying on opaque singular labels, TruthLens breaks down verification into three verifiable pillars:
+            Rather than relying on opaque singular labels, CapCheck AI breaks down verification into three verifiable pillars:
           </p>
         </div>
 
@@ -99,7 +99,7 @@ export const AboutPage: React.FC = () => {
           <span>Transparent Verification Standards</span>
         </div>
         <p className="text-xs text-amber-800 leading-relaxed">
-          TruthLens AI never invents evidence or pretends that an unverified claim has been checked. When evidence is scarce or media is heavily recompressed by social messaging apps, we transparently report the uncertainty with an honest confidence score.
+          CapCheck AI never invents evidence or pretends that an unverified claim has been checked. When evidence is scarce or media is heavily recompressed by social messaging apps, we transparently report the uncertainty with an honest confidence score.
         </p>
       </div>
     </div>

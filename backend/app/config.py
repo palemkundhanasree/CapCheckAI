@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Union
 from pydantic_settings import BaseSettings
 
 # Base directories
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # Security & CORS
     SECRET_KEY: str = "capcheck-ai-insecure-default-change-in-production-7f89d31b"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
-    CORS_ORIGINS: List[str] = [
+    CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
@@ -47,6 +47,11 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        if isinstance(self.CORS_ORIGINS, str):
+            if self.CORS_ORIGINS.strip() == "*":
+                self.CORS_ORIGINS = ["*"]
+            else:
+                self.CORS_ORIGINS = [orig.strip() for orig in self.CORS_ORIGINS.split(",") if orig.strip()]
         if not self.DATABASE_URL or "storage/capcheck.db" in self.DATABASE_URL or self.DATABASE_URL.startswith("sqlite:///./"):
             db_abs = (STORAGE_DIR / "capcheck.db").resolve().as_posix()
             self.DATABASE_URL = f"sqlite:///{db_abs}"

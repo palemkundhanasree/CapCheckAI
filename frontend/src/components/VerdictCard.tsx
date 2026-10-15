@@ -99,7 +99,7 @@ export const VerdictCard: React.FC<VerdictCardProps> = ({ report }) => {
               Evaluation Model
             </span>
             <span className="text-xs text-slate-700 font-mono">
-              TruthLens Forensics v1.0
+              CapCheck Forensics (≥75% Rule)
             </span>
           </div>
         </div>

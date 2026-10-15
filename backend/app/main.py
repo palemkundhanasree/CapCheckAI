@@ -25,33 +25,34 @@ logging.basicConfig(
     level=logging.INFO if not settings.DEBUG else logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
-logger = logging.getLogger("truthlens")
+logger = logging.getLogger("capcheck")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Initialize SQLite DB schema and run retention sweep
-    logger.info("Initializing TruthLens AI backend...")
+    logger.info("Initializing CapCheck AI backend...")
     init_db()
     cleanup_expired_files(settings.RETENTION_HOURS)
     yield
     # Shutdown
-    logger.info("TruthLens AI backend shutdown.")
+    logger.info("CapCheck AI backend shutdown.")
 
 
 app = FastAPI(
-    title="TruthLens AI - Fact Verification & Media Forensics API",
+    title="CapCheck AI - Fact Verification & Media Forensics API",
     description="Multi-modal verification engine distinguishing factual veracity, digital media synthesis, and context manipulation.",
     version=settings.VERSION,
     lifespan=lifespan
 )
 
-# CORS Middleware configured strictly for development frontend origins
+# CORS Middleware configured for local development and Netlify cloud deployments
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.CORS_ORIGINS if settings.CORS_ORIGINS != ["*"] else ["*"],
+    allow_origin_regex=r"^https:\/\/.*\.netlify\.app$" if settings.CORS_ORIGINS != ["*"] else None,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 

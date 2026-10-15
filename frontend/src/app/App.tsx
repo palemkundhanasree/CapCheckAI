@@ -1,7 +1,8 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
+import { authService } from '../services/authService';
 
 // Pages
 import { HomePage } from './routes/HomePage';
@@ -15,6 +16,25 @@ import { RegisterPage } from './routes/RegisterPage';
 import { ForgotPasswordPage } from './routes/ForgotPasswordPage';
 import { AdminPage } from './routes/AdminPage';
 
+// Protected Route Component: Starts site with Login if not authenticated
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(authService.isAuthenticated());
+
+  useEffect(() => {
+    const handleAuthChange = () => {
+      setIsAuthenticated(authService.isAuthenticated());
+    };
+    window.addEventListener('auth_state_changed', handleAuthChange);
+    return () => window.removeEventListener('auth_state_changed', handleAuthChange);
+  }, []);
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+
 export const App: React.FC = () => {
   return (
     <BrowserRouter>
@@ -22,16 +42,57 @@ export const App: React.FC = () => {
         <Navbar />
         <main className="flex-1">
           <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/verify" element={<VerifyPage />} />
-            <Route path="/results/:id" element={<ResultsPage />} />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="/about" element={<AboutPage />} />
-            <Route path="/privacy" element={<PrivacyPage />} />
+            {/* Public Authentication & Info Routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+
+            {/* Protected Routes: Users must sign in first to continue */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <HomePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/verify"
+              element={
+                <ProtectedRoute>
+                  <VerifyPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/results/:id"
+              element={
+                <ProtectedRoute>
+                  <ResultsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/history"
+              element={
+                <ProtectedRoute>
+                  <HistoryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Fallback to root (which starts at /login if not authenticated) */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
         <Footer />

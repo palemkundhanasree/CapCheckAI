@@ -67,7 +67,7 @@ export const AdminPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900">System Dashboard & Health</h1>
-            <p className="text-xs text-slate-500">TruthLens AI operational telemetry and media retention status.</p>
+            <p className="text-xs text-slate-500">CapCheck AI operational telemetry and media retention status.</p>
           </div>
         </div>
 

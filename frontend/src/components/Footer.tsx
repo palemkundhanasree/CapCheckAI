@@ -13,7 +13,7 @@ export const Footer: React.FC = () => {
                 <Shield className="w-4 h-4" />
               </div>
               <span className="text-lg font-bold text-slate-900 tracking-tight">
-                TruthLens <span className="text-blue-600">AI</span>
+                CapCheck <span className="text-blue-600">AI</span>
               </span>
             </div>
             <p className="text-slate-600 max-w-md text-xs leading-relaxed">
@@ -65,7 +65,7 @@ export const Footer: React.FC = () => {
         </div>
 
         <div className="mt-8 pt-8 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500">
-          <p>© {new Date().getFullYear()} TruthLens AI. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} CapCheck AI. All rights reserved.</p>
           <p className="mt-2 sm:mt-0">
             Know What to Trust • Objective Evidence • Transparent Forensics
           </p>

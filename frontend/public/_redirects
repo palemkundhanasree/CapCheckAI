@@ -1,0 +1,3 @@
+# Netlify Single-Page Application (SPA) redirect rule
+# Ensures client-side routing (React Router) works seamlessly on page refresh
+/*    /index.html   200

@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title TruthLens AI - Single-Click Launcher
+title CapCheck AI - Single-Click Launcher
 
 :: Change directory to the folder containing this batch script safely
 cd /d "%~dp0"
 
 echo ======================================================================
-echo                    TruthLens AI - One-Click Launcher
+echo                    CapCheck AI - One-Click Launcher
 echo ======================================================================
 echo [INFO] Current Directory: %~dp0
 echo.
@@ -75,14 +75,14 @@ pause
 exit /b 1
 
 :START_APP
-echo [INFO] Starting TruthLens AI using: %RUNNER%
+echo [INFO] Starting CapCheck AI using: %RUNNER%
 echo.
 
 "%RUNNER%" start_all.py
 
 echo.
 echo ======================================================================
-echo [NOTICE] TruthLens AI session ended.
+echo [NOTICE] CapCheck AI session ended.
 echo ======================================================================
 echo.
 pause

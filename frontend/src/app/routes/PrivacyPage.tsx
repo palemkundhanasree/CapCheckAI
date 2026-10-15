@@ -10,10 +10,10 @@ export const PrivacyPage: React.FC = () => {
           <span>Security & Data Protection Policy</span>
         </div>
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-          How TruthLens AI Protects Your Data
+          How CapCheck AI Protects Your Data
         </h1>
         <p className="text-sm text-slate-600 leading-relaxed max-w-2xl">
-          TruthLens AI is architected with security-by-design principles, local data retention limits, and zero non-consensual third-party tracking.
+          CapCheck AI is architected with security-by-design principles, local data retention limits, and zero non-consensual third-party tracking.
         </p>
       </div>
 
