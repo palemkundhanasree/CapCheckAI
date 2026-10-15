@@ -46,6 +46,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+origins = [
+    "https://capcheckai.netlify.app",
+    "https://*.netlify.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+]
+
 # CORS Middleware configured for local development and Netlify cloud deployments
 app.add_middleware(
     CORSMiddleware,
