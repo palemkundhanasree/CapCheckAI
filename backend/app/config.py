@@ -43,7 +43,18 @@ class Settings(BaseSettings):
     ]
 
     # Database
-    DATABASE_URL: str = f"sqlite:///{STORAGE_DIR / 'capcheck.db'}"
+    DATABASE_URL: str = ""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.DATABASE_URL or "storage/capcheck.db" in self.DATABASE_URL or self.DATABASE_URL.startswith("sqlite:///./"):
+            db_abs = (STORAGE_DIR / "capcheck.db").resolve().as_posix()
+            self.DATABASE_URL = f"sqlite:///{db_abs}"
+        elif self.DATABASE_URL.startswith("sqlite:///") and not self.DATABASE_URL.startswith("sqlite:////") and ":" not in self.DATABASE_URL[10:13]:
+            # Relative path provided
+            rel_part = self.DATABASE_URL.replace("sqlite:///", "")
+            db_abs = (ROOT_DIR / rel_part).resolve().as_posix()
+            self.DATABASE_URL = f"sqlite:///{db_abs}"
 
     # Rate Limiting
     RATE_LIMIT_REQUESTS_PER_MINUTE: int = 60
