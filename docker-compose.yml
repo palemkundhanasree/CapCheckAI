@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  capcheck-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: capcheck-ai
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=false
+      - DEMO_MODE=true
+      - DATABASE_URL=sqlite:///storage/capcheck.db
+    volumes:
+      - ./storage:/app/storage
+    restart: unless-stopped

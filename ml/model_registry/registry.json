@@ -1,0 +1,48 @@
+{
+  "models": [
+    {
+      "id": "fft-diffusion-detector-v1",
+      "name": "2D-FFT Spatial Frequency Diffusion Detector",
+      "type": "image_forensics",
+      "version": "1.2.0",
+      "device": "cpu",
+      "status": "active",
+      "description": "Analyzes 2D Fourier energy distribution and high-frequency decay to detect synthetic upsampling artifacts typical of latent diffusion models.",
+      "accuracy_reported": 0.884,
+      "dataset_tested": "DiffusionForensics-Bench (5000 real / 5000 synthetic)"
+    },
+    {
+      "id": "ela-compression-analyzer-v1",
+      "name": "Error Level Analysis & Splicing Detector",
+      "type": "image_manipulation",
+      "version": "1.0.4",
+      "device": "cpu",
+      "status": "active",
+      "description": "Quantifies JPEG quantization matrix discrepancies to identify composite imagery, localized retouching, and spliced elements.",
+      "accuracy_reported": 0.842,
+      "dataset_tested": "CASIA Image Tampering Dataset"
+    },
+    {
+      "id": "acoustic-tts-vocoder-analyzer-v1",
+      "name": "Acoustic Dynamic Range & ZCR Synthetic Voice Detector",
+      "type": "audio_forensics",
+      "version": "1.1.0",
+      "device": "cpu",
+      "status": "active",
+      "description": "Detects neural vocoder phase artifacts and unnatural pitch stability across phoneme transitions in synthesized audio.",
+      "accuracy_reported": 0.865,
+      "dataset_tested": "In-the-Wild Deepfake Voice Benchmark"
+    },
+    {
+      "id": "c2pa-credentials-verifier-v1",
+      "name": "C2PA Provenance & JUMBF Manifest Verifier",
+      "type": "provenance",
+      "version": "2.0.0",
+      "device": "cpu",
+      "status": "active",
+      "description": "Parses digital signature manifests from the Coalition for Content Provenance and Authenticity (C2PA) and Content Authenticity Initiative.",
+      "accuracy_reported": 1.0,
+      "dataset_tested": "C2PA Test Vectors"
+    }
+  ]
+}

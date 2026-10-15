@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "capcheck-ai"
+version = "1.0.0"
+description = "CapCheck AI - Multi-modal Fact Checking and Deepfake/Synthetic Media Verification"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.28.0",
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.0",
+    "sqlalchemy>=2.0.28",
+    "httpx>=0.27.0",
+    "beautifulsoup4>=4.12.3",
+    "python-multipart>=0.0.9",
+    "pillow>=10.2.0",
+    "numpy>=1.26.0",
+    "reportlab>=4.1.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.5"
+]
+
+[project.optional-dependencies]
+ml = [
+    "opencv-python-headless>=4.9.0.80",
+    "torch>=2.2.0",
+    "torchvision>=0.17.0"
+]
