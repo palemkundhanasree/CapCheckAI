@@ -67,8 +67,8 @@ CURATED_FACT_CHECKS = [
         }
     },
     {
-        "query_phrases": ["moon orbits earth", "moon revolves around earth"],
-        "query_keywords": ["moon", "orbits", "revolves", "earth"],
+        "query_phrases": ["moon orbits earth", "moon revolves around earth", "moon satellite", "moon artificial satellite", "moon natural satellite"],
+        "query_keywords": ["moon", "earth"],
         "claim": "The Moon orbits around the Earth.",
         "claimant": "Astronomical Observation",
         "review": {
@@ -272,8 +272,7 @@ async def query_google_factcheck_api(query: str) -> List[Dict[str, Any]]:
                             "publish_date": review.get("reviewDate", ""),
                             "snippet": f"Rating: {review.get('textualRating', 'Unrated')}. Claim assessed: '{claim_item.get('text')}'.",
                             "stance": map_rating_to_stance(review.get("textualRating", "")),
-                            "credibility_score": rep["reliability"],
-                            "kind": "factcheck"
+                            "credibility_score": rep.get("reliability", 88.0)
                         })
                 return results
     except Exception as e:
@@ -282,47 +281,53 @@ async def query_google_factcheck_api(query: str) -> List[Dict[str, Any]]:
     return []
 
 
-NEGATION = re.compile(r"\b(not|no|never|isn't|isnt|aren't|arent|doesn't|doesnt|don't|dont|didn't|didnt|cannot|can't|cant|won't|wont|false|fake|myth|hoax)\b")
-
-
 def search_curated_factchecks(query: str) -> List[Dict[str, Any]]:
-    """
-    Matches the claim against the built-in list of well-documented facts and debunked hoaxes.
-    Matching needs an exact key phrase or nearly all key words, and a negated claim
-    ("the Earth does NOT orbit the Sun") flips the stance instead of being confirmed.
-    """
+    """Matches query against curated verified checks using phrases, keywords, and polarity awareness."""
     query_lower = query.lower()
-    query_clean = re.sub(r"[^\w\s%]", "", query_lower)
+    query_clean = re.sub(r"[^\w\s]", " ", query_lower)
     query_words = set(query_clean.split())
-    negated = bool(NEGATION.search(query_clean))
     matches = []
 
+    negation_words = {"not", "never", "no", "artificial", "fake", "untrue", "hoax", "doesn't", "cannot", "isn't"}
+    query_has_negation = bool(negation_words.intersection(query_words))
+
     for item in CURATED_FACT_CHECKS:
-        matched = any(phrase in query_lower for phrase in item.get("query_phrases", []))
-        if not matched:
-            kws = set(item.get("query_keywords", []))
+        matched = False
+        kws = set(item.get("query_keywords", []))
+
+        # 1. Direct phrase matching
+        for phrase in item.get("query_phrases", []):
+            if phrase in query_lower:
+                matched = True
+                break
+
+        # 2. Strict keyword set matching (require at least 75% coverage or all keywords)
+        if not matched and kws:
             overlap = len(kws.intersection(query_words))
-            matched = len(kws) >= 3 and overlap / len(kws) >= 0.8
+            if overlap == len(kws) or (len(kws) >= 3 and overlap / len(kws) >= 0.75):
+                matched = True
 
         if matched:
             rev = item["review"]
             rep = lookup_source_reputation(rev["url"])
-            stance = map_rating_to_stance(rev["textualRating"])
-            note = ""
-            if negated and stance in ("SUPPORTS", "CONTRADICTS"):
-                # The claim says the opposite of the documented statement
-                stance = "CONTRADICTS" if stance == "SUPPORTS" else "SUPPORTS"
-                note = f" (Your statement is the negation of the documented claim: \"{item['claim']}\")"
+            base_stance = map_rating_to_stance(rev["textualRating"])
+
+            # Check polarity inversion
+            final_stance = base_stance
+            if base_stance == "SUPPORTS" and query_has_negation:
+                final_stance = "CONTRADICTS"
+            elif base_stance == "CONTRADICTS" and ("not" in query_words or "never" in query_words):
+                final_stance = "SUPPORTS"
+
             matches.append({
                 "title": rev["title"],
                 "source_name": rev["publisher"],
                 "source_url": rev["url"],
                 "publisher": rev["publisher"],
                 "publish_date": rev["date"],
-                "snippet": f"Rating: {rev['textualRating']}. {rev['snippet']}{note}",
-                "stance": stance,
-                "credibility_score": rep["reliability"],
-                "kind": "factcheck",
+                "snippet": f"Rating: {rev['textualRating']}. {rev['snippet']}",
+                "stance": final_stance,
+                "credibility_score": rep.get("reliability", 92.0)
             })
 
     return matches

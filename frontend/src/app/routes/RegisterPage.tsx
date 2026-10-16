@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { UserPlus, User, Mail, Lock, ArrowRight, AlertCircle } from 'lucide-react';
+import { UserPlus, User, Mail, Lock, ArrowRight, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { authService } from '../../services/authService';
 
 export const RegisterPage: React.FC = () => {
@@ -9,6 +9,7 @@ export const RegisterPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,8 +18,8 @@ export const RegisterPage: React.FC = () => {
     setLoading(true);
     setError(null);
 
-    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-      setError('Password must be at least 8 characters and include a letter and a number.');
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
       setLoading(false);
       return;
     }
@@ -53,9 +54,9 @@ export const RegisterPage: React.FC = () => {
           </div>
         )}
 
-        <form className="mt-6 space-y-4" onSubmit={handleRegister}>
+        <form className="mt-6 space-y-4" onSubmit={handleRegister} method="POST">
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+            <label htmlFor="register-name" className="block text-xs font-medium text-slate-700 mb-1">
               Full Name
             </label>
             <div className="relative">
@@ -63,7 +64,10 @@ export const RegisterPage: React.FC = () => {
                 <User className="h-4 w-4" />
               </div>
               <input
+                id="register-name"
+                name="name"
                 type="text"
+                autoComplete="name"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -74,7 +78,7 @@ export const RegisterPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+            <label htmlFor="register-email" className="block text-xs font-medium text-slate-700 mb-1">
               Email Address
             </label>
             <div className="relative">
@@ -82,7 +86,10 @@ export const RegisterPage: React.FC = () => {
                 <Mail className="h-4 w-4" />
               </div>
               <input
+                id="register-email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -93,7 +100,7 @@ export const RegisterPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+            <label htmlFor="register-username" className="block text-xs font-medium text-slate-700 mb-1">
               Username (Optional)
             </label>
             <div className="relative">
@@ -101,7 +108,10 @@ export const RegisterPage: React.FC = () => {
                 <span className="text-xs font-bold text-slate-400">@</span>
               </div>
               <input
+                id="register-username"
+                name="username"
                 type="text"
+                autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="sarah_j"
@@ -111,7 +121,7 @@ export const RegisterPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+            <label htmlFor="register-password" className="block text-xs font-medium text-slate-700 mb-1">
               Password
             </label>
             <div className="relative">
@@ -119,14 +129,25 @@ export const RegisterPage: React.FC = () => {
                 <Lock className="h-4 w-4" />
               </div>
               <input
-                type="password"
+                id="register-password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
                 required
-                minLength={8}
+                minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 8 characters, with a letter and a number"
-                className="block w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
+                placeholder="At least 6 characters"
+                className="block w-full pl-9 pr-10 py-2 text-sm border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
           </div>
 

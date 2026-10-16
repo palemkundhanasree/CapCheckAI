@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { authService } from '../services/authService';
@@ -16,84 +16,84 @@ import { RegisterPage } from './routes/RegisterPage';
 import { ForgotPasswordPage } from './routes/ForgotPasswordPage';
 import { AdminPage } from './routes/AdminPage';
 
-/** Shows a readable message (and a reload button) instead of a blank white page if a screen crashes. */
-class ErrorBoundary extends React.Component<{ children: React.ReactNode; resetKey: string }, { error: Error | null }> {
-  state = { error: null as Error | null };
-  static getDerivedStateFromError(error: Error) { return { error }; }
-  componentDidUpdate(prev: { resetKey: string }) {
-    // Moving to another page clears the error so navigation always works
-    if (this.state.error && prev.resetKey !== this.props.resetKey) this.setState({ error: null });
-  }
-  render() {
-    if (this.state.error) {
-      return (
-        <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-3">
-          <h2 className="text-lg font-semibold text-slate-900">Something went wrong on this page</h2>
-          <p className="text-xs text-slate-600">{this.state.error.message}</p>
-          <button className="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs" onClick={() => window.location.assign('/')}>
-            Back to home
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
+// Protected Route Component: Starts site with Login if not authenticated
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(authService.isAuthenticated());
 
-const RoutedBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const location = useLocation();
-  return <ErrorBoundary resetKey={location.pathname + location.search}>{children}</ErrorBoundary>;
-};
-
-function useSignedIn(): boolean {
-  const [signedIn, setSignedIn] = useState<boolean>(!!authService.getToken());
   useEffect(() => {
-    const sync = () => setSignedIn(!!authService.getToken());
-    window.addEventListener('auth_state_changed', sync);
-    return () => window.removeEventListener('auth_state_changed', sync);
+    const handleAuthChange = () => {
+      setIsAuthenticated(authService.isAuthenticated());
+    };
+    window.addEventListener('auth_state_changed', handleAuthChange);
+    return () => window.removeEventListener('auth_state_changed', handleAuthChange);
   }, []);
-  return signedIn;
-}
 
-/** The whole product is members-only: anonymous visitors are sent to the sign-in page. */
-const RequireAuth: React.FC = () => {
-  const signedIn = useSignedIn();
-  const location = useLocation();
-  if (!signedIn) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
-  return <Outlet />;
-};
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
-const GuestOnly: React.FC = () => {
-  const signedIn = useSignedIn();
-  if (signedIn) return <Navigate to="/" replace />;
-  return <Outlet />;
+  return <>{children}</>;
 };
 
 export const App: React.FC = () => {
   return (
     <BrowserRouter>
-      <div className="flex flex-col min-h-screen bg-paper text-slate-900">
+      <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 selection:bg-blue-600 selection:text-white">
         <Navbar />
         <main className="flex-1">
-          <RoutedBoundary>
           <Routes>
-            <Route element={<GuestOnly />}>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            </Route>
-            <Route element={<RequireAuth />}>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/verify" element={<VerifyPage />} />
-              <Route path="/results/:id" element={<ResultsPage />} />
-              <Route path="/history" element={<HistoryPage />} />
-              <Route path="/about" element={<AboutPage />} />
-              <Route path="/privacy" element={<PrivacyPage />} />
-              <Route path="/admin" element={<AdminPage />} />
-            </Route>
+            {/* Public Authentication & Info Routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+
+            {/* Protected Routes: Users must sign in first to continue */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <HomePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/verify"
+              element={
+                <ProtectedRoute>
+                  <VerifyPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/results/:id"
+              element={
+                <ProtectedRoute>
+                  <ResultsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/history"
+              element={
+                <ProtectedRoute>
+                  <HistoryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Fallback to root (which starts at /login if not authenticated) */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          </RoutedBoundary>
         </main>
         <Footer />
       </div>

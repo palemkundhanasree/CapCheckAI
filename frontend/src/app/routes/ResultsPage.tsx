@@ -5,7 +5,6 @@ import { reportApi } from '../../services/reportApi';
 import { VerificationReport } from '../../types';
 
 import { VerdictCard } from '../../components/VerdictCard';
-import { ReportCard } from '../../components/ReportCard';
 import { ConfidenceMeter } from '../../components/ConfidenceMeter';
 import { SourceList } from '../../components/SourceList';
 import { ImageAnalysis } from '../../components/ImageAnalysis';
@@ -83,9 +82,6 @@ export const ResultsPage: React.FC = () => {
 
       {/* Main Verdict Card with Media Preview and Reason */}
       <VerdictCard report={report} />
-
-      {/* Report card: overall grade + percentage, and how each test contributed */}
-      <ReportCard report={report} />
 
       {/* Confidence Meter */}
       <ConfidenceMeter score={report.confidence_score} level={report.confidence_level} />

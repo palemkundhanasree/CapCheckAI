@@ -35,32 +35,6 @@ def test_evaluate_media_authenticity_thresholds():
     authentic = VerdictEngine.evaluate_media_authenticity(
         ai_score=12.0,
         manipulation_score=8.0,
-        indicators=[],
-        has_provenance=True
+        indicators=[]
     )
     assert authentic == MediaAuthenticityType.AUTHENTIC.value
-
-    # Without camera data or Content Credentials, "no warning signs" is only "likely" authentic
-    unproven = VerdictEngine.evaluate_media_authenticity(ai_score=12.0, manipulation_score=8.0, indicators=[])
-    assert unproven == MediaAuthenticityType.LIKELY_AUTHENTIC.value
-
-
-def test_correctness_percentage_for_claims():
-    strong_false = [{"stance": "CONTRADICTS", "credibility_score": 90.0, "kind": "knowledge", "publisher": "Ref"}]
-    pct, why = VerdictEngine.estimate_correctness("claim", strong_false, [], None, 80.0)
-    assert pct is not None and pct <= 10 and "contradict" in why.lower() or "support" in why.lower()
-
-    strong_true = [{"stance": "SUPPORTS", "credibility_score": 90.0, "kind": "knowledge", "publisher": "Ref"}]
-    pct, _ = VerdictEngine.estimate_correctness("claim", strong_true, [], None, 80.0)
-    assert pct >= 90
-
-    # No decisive source: a percentage must not be invented
-    pct, why = VerdictEngine.estimate_correctness("claim", [], [], None, 20.0)
-    assert pct is None and "guess" in why
-
-
-def test_correctness_percentage_for_media_is_capped():
-    pct, _ = VerdictEngine.estimate_correctness("image", [], [5.0, 8.0], None, 90.0)
-    assert pct == 88
-    pct, _ = VerdictEngine.estimate_correctness("image", [], [96.0], None, 90.0)
-    assert pct <= 4

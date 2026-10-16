@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { EvidenceItem } from '../types';
 import { EvidenceCard } from './EvidenceCard';
-import { CheckCircle, XCircle, FileText } from 'lucide-react';
+import { CheckCircle, XCircle, FileText, ShieldCheck, ShieldAlert, BarChart3 } from 'lucide-react';
 
 interface SourceListProps {
   evidenceItems: EvidenceItem[];
@@ -17,9 +17,58 @@ export const SourceList: React.FC<SourceListProps> = ({ evidenceItems }) => {
 
   const supportCount = evidenceItems.filter((i) => i.stance === 'SUPPORTS').length;
   const contradictCount = evidenceItems.filter((i) => i.stance === 'CONTRADICTS').length;
+  const contextCount = evidenceItems.filter((i) => i.stance !== 'SUPPORTS' && i.stance !== 'CONTRADICTS').length;
+
+  const totalEvaluated = supportCount + contradictCount;
+  const supportPct = totalEvaluated > 0 ? Math.round((supportCount / totalEvaluated) * 100) : 0;
+  const isMeetsThreshold = supportPct >= 75 && supportCount > 0;
 
   return (
     <div className="space-y-4">
+      {/* Source Audit Evaluation Card */}
+      {evidenceItems.length > 0 && (
+        <div className={`p-4 rounded-xl border ${isMeetsThreshold ? 'border-green-200 bg-green-50/40' : 'border-red-200 bg-red-50/40'}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-2.5">
+              {isMeetsThreshold ? (
+                <ShieldCheck className="w-5 h-5 text-green-600 flex-shrink-0" />
+              ) : (
+                <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0" />
+              )}
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
+                  <span>Source Audit Consensus:</span>
+                  <span className={isMeetsThreshold ? 'text-green-700' : 'text-red-700'}>
+                    {supportPct}% Verified Support
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-600">
+                  {isMeetsThreshold
+                    ? `Authoritative internet sources corroborate this content with ≥75% agreement (Accuracy Level of Real: ${supportPct}%).`
+                    : `Content lacks required 75% verified internet corroboration or is actively refuted (Accuracy Level of Real: ${supportPct}%).`}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 text-xs font-medium">
+              <span className="px-2.5 py-1 rounded-md bg-white border border-slate-200 text-green-700 flex items-center space-x-1">
+                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                <span>{supportCount} Supports</span>
+              </span>
+              <span className="px-2.5 py-1 rounded-md bg-white border border-slate-200 text-red-700 flex items-center space-x-1">
+                <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                <span>{contradictCount} Contradicts</span>
+              </span>
+              {contextCount > 0 && (
+                <span className="px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-600">
+                  {contextCount} Context
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Filter Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <div>

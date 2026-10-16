@@ -1,5 +1,7 @@
-# CapCheck AI - Netlify Production Deployment Configuration
-# Decoupled Frontend (Vite / React 18 / Tailwind CSS) with FastAPI Backend
+# ====================================================================
+# CapCheck AI — Netlify Production Deployment Configuration
+# Decoupled Frontend (React 18 / Vite / Tailwind CSS) + FastAPI Backend
+# ====================================================================
 
 [build]
   base = "frontend"
@@ -10,13 +12,17 @@
   NODE_VERSION = "20"
   NPM_FLAGS = "--legacy-peer-deps"
 
-# Single-Page Application (SPA) routing: redirect all paths to index.html for React Router
+# --------------------------------------------------------------------
+# SPA Routing: Redirect all web paths to index.html for React Router
+# --------------------------------------------------------------------
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-# Production security and asset caching headers
+# --------------------------------------------------------------------
+# Production Security Headers & Asset Caching
+# --------------------------------------------------------------------
 [[headers]]
   for = "/*"
   [headers.values]

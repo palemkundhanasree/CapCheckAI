@@ -12,15 +12,24 @@ export const NewsUrlInput: React.FC<NewsUrlInputProps> = ({ onSubmit, isLoading 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url.trim()) {
+    let cleanUrl = url.trim();
+    if (!cleanUrl) {
       setError('Please paste a link to an article or web page.');
       return;
     }
 
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = `https://${cleanUrl}`;
+    }
+
     try {
-      const parsed = new URL(url.trim());
+      const parsed = new URL(cleanUrl);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         setError('URL must begin with http:// or https://');
+        return;
+      }
+      if (!parsed.hostname.includes('.')) {
+        setError('Please enter a valid website domain (e.g. bbc.com or reuters.com).');
         return;
       }
     } catch {
@@ -29,13 +38,14 @@ export const NewsUrlInput: React.FC<NewsUrlInputProps> = ({ onSubmit, isLoading 
     }
 
     setError(null);
-    onSubmit(url.trim());
+    onSubmit(cleanUrl);
   };
 
   const sampleUrls = [
     { label: 'NASA Heliocentric Overview', url: 'https://solarsystem.nasa.gov/planets/earth/overview/' },
-    { label: 'WHO COVID-19 Mythbusters', url: 'https://www.who.int/emergencies/diseases/novel-coronavirus-2019/advice-for-public/myth-busters' },
-    { label: 'Encyclopaedia Britannica', url: 'https://www.britannica.com/place/Paris' },
+    { label: 'Encyclopaedia Britannica Paris', url: 'https://www.britannica.com/place/Paris' },
+    { label: 'BBC News', url: 'https://www.bbc.com/news' },
+    { label: 'Reuters World News', url: 'https://www.reuters.com/world/' },
   ];
 
   return (

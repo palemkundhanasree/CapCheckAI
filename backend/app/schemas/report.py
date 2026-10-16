@@ -33,12 +33,8 @@ class ReportResponse(BaseModel):
     context_verdict: Optional[str] = None
     summary: str
     explanation: str
-    correctness_score: Optional[float] = None
-    correctness_explanation: Optional[str] = None
-    report_card: Optional[Dict[str, Any]] = None
     limitations: List[str] = []
     checks_performed: List[str] = []
-    checks_unavailable: List[str] = []
     created_at: datetime
     input_preview: Optional[str] = None
     media_url: Optional[str] = None

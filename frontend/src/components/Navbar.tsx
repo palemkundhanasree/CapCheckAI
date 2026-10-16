@@ -17,6 +17,26 @@ export const Navbar: React.FC = () => {
       .then(setHealth)
       .catch(() => setHealth(null));
 
+    const syncUser = async () => {
+      const stored = authService.getUser();
+      setUser(stored);
+
+      if (authService.isAuthenticated()) {
+        try {
+          const profile = await authService.getCurrentUserProfile();
+          if (profile) {
+            setUser(profile);
+          }
+        } catch {
+          // If token expired, clear cleanly
+          authService.logout();
+          setUser(null);
+        }
+      }
+    };
+
+    syncUser();
+
     const handleAuthChange = () => {
       setUser(authService.getUser());
     };
@@ -27,15 +47,15 @@ export const Navbar: React.FC = () => {
 
   const handleLogout = () => {
     authService.logout();
+    setUser(null);
     setUserMenuOpen(false);
-    navigate('/');
+    navigate('/login');
   };
 
   const navLinks = [
     { to: '/', label: 'Home' },
     { to: '/verify', label: 'Verify News' },
-    { to: '/#how-it-works', label: 'How It Works' },
-    { to: '/about', label: 'About' },
+    { to: '/about', label: 'How It Works' },
     { to: '/history', label: 'History' },
   ];
 
@@ -59,8 +79,8 @@ export const Navbar: React.FC = () => {
 
         {/* Center Nav Links */}
         <nav className="hidden md:flex items-center space-x-1">
-          {user && navLinks.map((item) => {
-            const isActive = item.to.includes('#') ? false : location.pathname === item.to;
+          {navLinks.map((item) => {
+            const isActive = location.pathname === item.to;
             return (
               <Link
                 key={item.to}
@@ -94,17 +114,27 @@ export const Navbar: React.FC = () => {
                 className="flex items-center space-x-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium cursor-pointer"
               >
                 <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
-                  {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                  {user.name ? user.name.charAt(0).toUpperCase() : (user.username ? user.username.charAt(0).toUpperCase() : 'U')}
                 </div>
-                <span className="max-w-[100px] truncate">{user.name || user.email}</span>
+                <span className="max-w-[120px] truncate">{user.name || user.username || user.email}</span>
               </button>
 
               {userMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
+                <div className="absolute right-0 mt-2 w-52 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
                   <div className="px-4 py-2 border-b border-slate-100">
-                    <p className="text-xs font-semibold text-slate-800 truncate">{user.name}</p>
+                    <p className="text-xs font-semibold text-slate-800 truncate">{user.name || user.username}</p>
                     <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
+                    <span className="inline-block mt-1 px-1.5 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-600 rounded">
+                      Role: {user.role || 'user'}
+                    </span>
                   </div>
+                  <Link
+                    to="/verify"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="block px-4 py-2 text-xs text-slate-700 hover:bg-slate-50"
+                  >
+                    Verify Media & Claims
+                  </Link>
                   <Link
                     to="/history"
                     onClick={() => setUserMenuOpen(false)}
@@ -112,18 +142,25 @@ export const Navbar: React.FC = () => {
                   >
                     My History
                   </Link>
+                  <Link
+                    to="/about"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="block px-4 py-2 text-xs text-slate-700 hover:bg-slate-50"
+                  >
+                    How It Works
+                  </Link>
                   {user.role === 'admin' && (
                     <Link
                       to="/admin"
                       onClick={() => setUserMenuOpen(false)}
-                      className="block px-4 py-2 text-xs text-slate-700 hover:bg-slate-50"
+                      className="block px-4 py-2 text-xs text-blue-600 font-medium hover:bg-blue-50"
                     >
                       System Admin
                     </Link>
                   )}
                   <button
                     onClick={handleLogout}
-                    className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center space-x-1.5 cursor-pointer"
+                    className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center space-x-1.5 cursor-pointer border-t border-slate-100 mt-1"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     <span>Sign Out</span>
@@ -147,13 +184,6 @@ export const Navbar: React.FC = () => {
               </Link>
             </div>
           )}
-
-          {user && <Link
-            to="/verify"
-            className="hidden sm:inline-flex items-center justify-center px-3.5 py-1.5 rounded-md text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 transition-colors"
-          >
-            Verify Now
-          </Link>}
         </div>
       </div>
     </header>

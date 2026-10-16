@@ -26,7 +26,7 @@ export const AboutPage: React.FC = () => {
             <span>The 3 Pillars of Every Verification</span>
           </h2>
           <p className="text-xs text-slate-600 mt-1">
-            Rather than relying on opaque singular labels, CapCheck breaks down verification into three verifiable pillars:
+            Rather than relying on opaque singular labels, CapCheck AI breaks down verification into three verifiable pillars:
           </p>
         </div>
 

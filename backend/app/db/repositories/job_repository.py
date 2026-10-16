@@ -59,8 +59,12 @@ class JobRepository:
             self.db.refresh(job)
         return job
 
-    def get_recent_jobs(self, limit: int = 50, user_id: Optional[str] = None) -> List[VerificationJob]:
-        q = self.db.query(VerificationJob)
-        if user_id:
-            q = q.filter(VerificationJob.user_id == user_id)
-        return q.order_by(VerificationJob.created_at.desc()).limit(limit).all()
+    def get_recent_jobs(self, limit: int = 50, user_id: Optional[str] = None, include_all: bool = False) -> List[VerificationJob]:
+        query = self.db.query(VerificationJob)
+        if not include_all:
+            if not user_id:
+                return []
+            query = query.filter(VerificationJob.user_id == user_id)
+        elif user_id:
+            query = query.filter(VerificationJob.user_id == user_id)
+        return query.order_by(VerificationJob.created_at.desc()).limit(limit).all()

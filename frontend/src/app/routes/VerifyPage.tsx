@@ -164,6 +164,11 @@ export const VerifyPage: React.FC = () => {
             jobId={activeJobId}
             onComplete={handleJobComplete}
             onError={(err) => setSubmissionError(err)}
+            onReset={() => {
+              setActiveJobId(null);
+              setSearchParams({});
+              setSubmissionError(null);
+            }}
           />
           <div className="text-center">
             <button

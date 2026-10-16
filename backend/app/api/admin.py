@@ -19,7 +19,7 @@ async def admin_login(request: AdminLoginRequest, db: Session = Depends(get_db))
             detail="Incorrect admin username or password."
         )
 
-    token = create_access_token(data={"sub": user.email, "role": user.role, "uid": user.id})
+    token = create_access_token(data={"sub": user.username, "role": user.role})
     return {
         "access_token": token,
         "token_type": "bearer",

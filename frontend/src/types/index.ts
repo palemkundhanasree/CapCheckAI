@@ -31,29 +31,6 @@ export interface MediaAnalysisDetail {
   manipulation_indicators: string[];
 }
 
-export type CardStatus = 'good' | 'warn' | 'bad' | 'unknown';
-
-export interface ReportCardSection {
-  key: string;
-  title: string;
-  /** 0-100 "how correct/genuine this test says it is", or null when the test could not judge. */
-  percent: number | null;
-  status: CardStatus;
-  detail: string;
-}
-
-export interface ReportCardData {
-  overall_percent: number | null;
-  grade: string;
-  grade_label: string;
-  confidence_score: number;
-  confidence_level: string;
-  sections: ReportCardSection[];
-  how_calculated: string;
-  explanation: string;
-  caveats: string[];
-}
-
 export interface VerificationReport {
   id: string;
   job_id: string;
@@ -68,9 +45,6 @@ export interface VerificationReport {
   context_verdict?: string;
   summary: string;
   explanation: string;
-  correctness_score?: number | null;
-  correctness_explanation?: string | null;
-  report_card?: ReportCardData | null;
   limitations: string[];
   checks_performed: string[];
   checks_unavailable: string[];

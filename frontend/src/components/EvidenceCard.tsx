@@ -49,7 +49,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({ evidence }) => {
             </span>
             {evidence.credibility_score >= 85 && (
               <span className="text-[10px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                High reliability
+                Verified
               </span>
             )}
           </div>

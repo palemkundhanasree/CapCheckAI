@@ -24,12 +24,16 @@ DISALLOWED_CIDRS = [
 def validate_url_safety(url: str) -> str:
     """
     Validates URL scheme, resolves hostname, and checks against private/internal IP ranges
-    to prevent SSRF attacks.
+    to prevent SSRF attacks. Auto-prefixes https:// if missing.
     """
     if not url or not isinstance(url, str):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="URL must be a non-empty string.")
 
     url = url.strip()
+    # Auto-normalize protocol if user pasted raw domain or path
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+
     parsed = urlparse(url)
 
     if parsed.scheme.lower() not in ("http", "https"):
@@ -42,46 +46,74 @@ def validate_url_safety(url: str) -> str:
     if not hostname:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid URL: Missing hostname.")
 
+    if " " in hostname or "." not in hostname:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid URL: Hostname must be a valid domain name.")
+
     # Prevent localhost explicitly
     if hostname.lower() in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access to local loopback is prohibited.")
 
+    # Fast-path check: if hostname is directly an IP address literal
+    try:
+        ip_direct = ipaddress.ip_address(hostname)
+        for cidr in DISALLOWED_CIDRS:
+            if ip_direct in cidr:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Access to private/internal IP range ({hostname}) is blocked by CapCheck security policy."
+                )
+    except ValueError:
+        pass
+
     # Resolve IP addresses for the hostname
     try:
         resolved_addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-    except socket.gaierror:
+        for item in resolved_addr_info:
+            ip_str = item[4][0]
+            try:
+                ip_obj = ipaddress.ip_address(ip_str)
+                for cidr in DISALLOWED_CIDRS:
+                    if ip_obj in cidr:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"Access to private/internal IP range ({ip_str}) is blocked by CapCheck security policy."
+                        )
+            except ValueError:
+                continue
+    except (socket.gaierror, socket.herror, OSError):
+        from app.config import settings
+        # In demo mode or offline networks, allow URL for domain reputation and knowledge matching
+        if getattr(settings, "DEMO_MODE", True):
+            return url
+        # If not in demo mode, raise friendly message
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not resolve host '{hostname}'. Check the URL or your network connection."
+            detail=f"Could not resolve host '{hostname}'. Please check your network connection or provide a valid website URL."
         )
-
-    for item in resolved_addr_info:
-        ip_str = item[4][0]
-        try:
-            ip_obj = ipaddress.ip_address(ip_str)
-            for cidr in DISALLOWED_CIDRS:
-                if ip_obj in cidr:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail=f"Access to private/internal IP range ({ip_str}) is blocked by CapCheck security policy."
-                    )
-        except ValueError:
-            continue
 
     return url
 
 
-async def safe_fetch_url(url: str, max_bytes: int = 5 * 1024 * 1024, timeout_sec: float = 10.0) -> Tuple[str, str, int]:
+async def safe_fetch_url(url: str, max_bytes: int = 5 * 1024 * 1024, timeout_sec: float = 8.0) -> Tuple[str, str, int]:
     """
-    Fetches the content of a public URL safely with size limits and SSRF re-checks.
+    Fetches the content of a public URL safely with size limits, browser headers, and SSRF re-checks.
     Returns (html_content, final_url, status_code).
     """
     safe_url = validate_url_safety(url)
 
+    # Use realistic browser headers to avoid Cloudflare / anti-bot 403 blocks on news sites
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; CapCheck-AI/1.0; verification-research)",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1"
     }
 
     async with httpx.AsyncClient(

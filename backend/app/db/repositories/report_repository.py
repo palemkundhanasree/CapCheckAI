@@ -25,18 +25,20 @@ class ReportRepository:
         factual_claim_verdict: Optional[str] = None,
         media_authenticity_verdict: Optional[str] = None,
         context_verdict: Optional[str] = None,
-        correctness_score: Optional[float] = None,
-        correctness_explanation: Optional[str] = None,
-        report_card: Optional[Dict[str, Any]] = None,
         input_preview: Optional[str] = None,
         evidence_items: Optional[List[Dict[str, Any]]] = None,
         media_analysis_data: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None,
     ) -> Report:
-        from app.db.models import VerificationJob
-        job = self.db.query(VerificationJob).filter(VerificationJob.id == job_id).first()
+        if not user_id:
+            from app.db.models import VerificationJob
+            job = self.db.query(VerificationJob).filter(VerificationJob.id == job_id).first()
+            if job and job.user_id:
+                user_id = job.user_id
+
         report = Report(
             job_id=job_id,
-            user_id=job.user_id if job else None,
+            user_id=user_id,
             title=title,
             input_type=input_type,
             input_preview=input_preview or title,
@@ -51,10 +53,7 @@ class ReportRepository:
             checks_unavailable=json.dumps(checks_unavailable or []),
             factual_claim_verdict=factual_claim_verdict,
             media_authenticity_verdict=media_authenticity_verdict,
-            context_verdict=context_verdict,
-            correctness_score=correctness_score,
-            correctness_explanation=correctness_explanation,
-            report_card=json.dumps(report_card) if report_card else None
+            context_verdict=context_verdict
         )
         self.db.add(report)
         self.db.flush()
@@ -101,11 +100,15 @@ class ReportRepository:
     def get_report_by_job_id(self, job_id: str) -> Optional[Report]:
         return self.db.query(Report).filter(Report.job_id == job_id).first()
 
-    def list_reports(self, limit: int = 50, offset: int = 0, user_id: Optional[str] = None) -> List[Report]:
-        q = self.db.query(Report)
-        if user_id:
-            q = q.filter(Report.user_id == user_id)
-        return q.order_by(Report.created_at.desc()).offset(offset).limit(limit).all()
+    def list_reports(self, limit: int = 50, offset: int = 0, user_id: Optional[str] = None, include_all: bool = False) -> List[Report]:
+        query = self.db.query(Report)
+        if not include_all:
+            if not user_id:
+                return []
+            query = query.filter(Report.user_id == user_id)
+        elif user_id:
+            query = query.filter(Report.user_id == user_id)
+        return query.order_by(Report.created_at.desc()).offset(offset).limit(limit).all()
 
     def delete_report(self, report_id: str) -> bool:
         report = self.get_report_by_id(report_id)

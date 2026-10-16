@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 from PIL import Image
 from app.engines.image.ai_image_detector import detect_ai_generation
+from app.engines.image.manipulation_detector import perform_error_level_analysis
 
 
 def analyze_frame_deepfake(frame_path: Path, frame_idx: int, timestamp: float) -> Dict[str, Any]:
@@ -10,14 +11,15 @@ def analyze_frame_deepfake(frame_path: Path, frame_idx: int, timestamp: float) -
     """
     img = Image.open(frame_path).convert("RGB")
     ai_res = detect_ai_generation(frame_path, img)
+    ela_res = perform_error_level_analysis(img)
 
-    # Error-level analysis is deliberately NOT used here: the frame JPEGs are written by this app from a video
-    # stream, so they have no genuine JPEG history to compare and every textured frame would look "edited".
     anomalies = []
     if ai_res["is_ai_generated"]:
         anomalies.append("Generative frequency artifacts detected on frame")
+    if ela_res["splicing_detected"]:
+        anomalies.append("Localized compression mismatch on frame region")
 
-    artifact_score = round(ai_res["ai_generated_score"] * 0.7, 1)
+    artifact_score = round(ai_res["ai_generated_score"] * 0.7 + (35.0 if ela_res["splicing_detected"] else 0.0), 1)
 
     return {
         "frame_index": frame_idx,

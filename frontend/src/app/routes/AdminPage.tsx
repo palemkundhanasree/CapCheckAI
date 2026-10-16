@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Activity, Trash2, CheckCircle, AlertCircle, LogOut, Database } from 'lucide-react';
 import { authService } from '../../services/authService';
+import { request, ApiError } from '../../services/apiClient';
 
 export const AdminPage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,19 +18,15 @@ export const AdminPage: React.FC = () => {
       return;
     }
 
-    fetch('/api/v1/admin/stats', {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then((res) => {
-        if (res.status === 401 || res.status === 403) {
-          authService.logout();
-          navigate('/login');
-          return null;
-        }
-        return res.json();
-      })
+    request<any>('/admin/stats')
       .then((data) => {
         if (data) setStats(data);
+      })
+      .catch((err) => {
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          authService.logout();
+          navigate('/login');
+        }
       })
       .finally(() => setLoading(false));
   }, [token, navigate]);
@@ -37,14 +34,12 @@ export const AdminPage: React.FC = () => {
   const handlePurge = async () => {
     if (!window.confirm('Trigger immediate manual purge of files older than 24 hours?')) return;
     try {
-      const res = await fetch('/api/v1/admin/purge-old-files', {
+      const data = await request<{ message: string }>('/admin/purge-old-files', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
       });
-      const data = await res.json();
       setPurgeMsg(data.message);
-    } catch {
-      setPurgeMsg('Purge failed.');
+    } catch (err: any) {
+      setPurgeMsg(err?.message || 'Purge failed.');
     }
   };
 

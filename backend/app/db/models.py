@@ -50,9 +50,6 @@ class Report(Base):
     confidence_level = Column(String(20), nullable=False)  # LOW, MEDIUM, HIGH
 
     summary = Column(Text, nullable=False)
-    correctness_score = Column(Float, nullable=True)  # 0-100 likelihood the input is correct/genuine
-    correctness_explanation = Column(Text, nullable=True)
-    report_card = Column(Text, nullable=True)  # JSON: per-test breakdown shown as the report card
     explanation = Column(Text, nullable=False)
     limitations = Column(Text, default="[]")  # JSON encoded list of known limitations
     checks_performed = Column(Text, default="[]")  # JSON encoded list
@@ -115,7 +112,6 @@ class User(Base):
     role = Column(String(20), default="user")  # admin, user
     otp_code = Column(String(10), nullable=True)
     otp_expires_at = Column(DateTime, nullable=True)
-    otp_attempts = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

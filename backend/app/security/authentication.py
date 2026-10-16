@@ -65,6 +65,30 @@ async def get_current_user_optional(token: Optional[str] = Depends(oauth2_scheme
         return None
 
 
+def get_user_id_from_token(token_data: Optional[TokenData], db) -> Optional[str]:
+    """Helper to resolve user ID safely from TokenData and database."""
+    if not token_data:
+        return None
+    if token_data.uid:
+        return token_data.uid
+    if token_data.username:
+        from app.db.models import User
+        user = db.query(User).filter(
+            (User.email == token_data.username) | (User.username == token_data.username)
+        ).first()
+        return user.id if user else None
+    return None
+
+
+async def require_authenticated_user(token_data: Optional[TokenData] = Depends(get_current_user_optional)) -> TokenData:
+    if not token_data or not token_data.username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to access personal data."
+        )
+    return token_data
+
+
 async def require_admin_user(token_data: Optional[TokenData] = Depends(get_current_user_optional)) -> TokenData:
     if not token_data or token_data.role != "admin":
         raise HTTPException(
@@ -72,19 +96,3 @@ async def require_admin_user(token_data: Optional[TokenData] = Depends(get_curre
             detail="Admin privileges required."
         )
     return token_data
-
-
-async def require_user(token_data: Optional[TokenData] = Depends(get_current_user_optional)) -> TokenData:
-    """Every verification, history, job and report endpoint requires a signed-in user."""
-    if not token_data or not token_data.uid:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Please sign in to use CapCheck AI.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return token_data
-
-
-def can_access(owner_id: Optional[str], user: TokenData) -> bool:
-    """A record is accessible to its owner and to administrators."""
-    return user.role == "admin" or (owner_id is not None and owner_id == user.uid)

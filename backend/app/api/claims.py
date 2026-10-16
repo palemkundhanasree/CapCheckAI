@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 from fastapi import APIRouter, Depends, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -7,7 +8,7 @@ from app.schemas.request import ClaimVerifyRequest
 from app.schemas.report import JobStatusResponse
 from app.workers.tasks import run_claim_verification_task
 from app.security.rate_limiter import rate_limit_dependency
-from app.security.authentication import require_user, TokenData
+from app.security.authentication import require_authenticated_user, get_user_id_from_token, TokenData
 
 router = APIRouter(tags=["Claim Verification"])
 
@@ -16,13 +17,14 @@ router = APIRouter(tags=["Claim Verification"])
 async def verify_claim_endpoint(
     request: ClaimVerifyRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    user: TokenData = Depends(require_user)
+    token_data: TokenData = Depends(require_authenticated_user),
+    db: Session = Depends(get_db)
 ):
     """Submits a textual claim for factual verification."""
     job_repo = JobRepository(db)
+    user_id = get_user_id_from_token(token_data, db)
     input_meta = json.dumps({"claim_text": request.claim_text, "context": request.context})
-    job = job_repo.create_job(job_type="claim", input_data=input_meta, user_id=user.uid)
+    job = job_repo.create_job(job_type="claim", input_data=input_meta, user_id=user_id)
 
     background_tasks.add_task(
         run_claim_verification_task,

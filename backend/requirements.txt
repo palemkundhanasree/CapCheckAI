@@ -28,7 +28,6 @@ pytest==8.1.1
 pytest-asyncio==0.23.5
 
 # Optional Media & ML Engines (Installed automatically if available)
-opencv-python-headless>=4.9.0
-# openai-whisper  (optional: speech-to-text for audio/video claims; large download)
+# opencv-python-headless>=4.9.0
 # torch>=2.2.0
 # torchvision>=0.17.0

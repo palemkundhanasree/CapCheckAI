@@ -14,23 +14,18 @@ def read_image_metadata(file_path: Path, img: Image.Image) -> Dict[str, Any]:
         "software": None,
         "date_time": None,
         "generator_signatures": [],
-        "editing_signatures": [],
         "raw_tags": {}
     }
 
-    # 1. Inspect PIL Info dictionary (PNG text chunks, WebP info).
-    # Generic words such as "steps" or "seed" are only meaningful as chunk NAMES (that is how Stable Diffusion
-    # tools store them). Matching them inside free text would flag a photo captioned "two steps from home".
-    GENERATOR_CHUNK_KEYS = {"parameters", "prompt", "workflow", "sd-metadata", "invokeai_metadata", "negative_prompt"}
-    GENERATOR_NAMES = ["stable diffusion", "midjourney", "dall-e", "dall·e", "novelai", "comfyui", "automatic1111",
-                       "invokeai", "adobe firefly", "leonardo.ai"]
+    # 1. Inspect PIL Info dictionary (contains PNG text chunks, WebP info)
     if hasattr(img, "info") and isinstance(img.info, dict):
         for k, v in img.info.items():
-            if isinstance(v, (bytes, bytearray)):
-                continue  # ICC profiles, thumbnails and other binary blobs are not text claims
-            k_str = str(k).lower().strip()
-            v_str = str(v).lower()
-            if k_str in GENERATOR_CHUNK_KEYS or any(name in v_str for name in GENERATOR_NAMES):
+            k_str = str(k).lower()
+            v_str = str(v)
+            if any(term in k_str or term in v_str.lower() for term in [
+                "prompt", "steps", "sampler", "cfg scale", "seed", "stable diffusion",
+                "midjourney", "dall-e", "novelai", "comfyui", "automatic1111"
+            ]):
                 metadata["generator_signatures"].append(f"AI generation metadata detected in chunk '{k}'")
                 metadata["software"] = "AI Generative Engine (Embedded Chunk)"
 
@@ -53,7 +48,7 @@ def read_image_metadata(file_path: Path, img: Image.Image) -> Dict[str, Any]:
                     # Check for editing software
                     soft_lower = str(val_str).lower()
                     if any(s in soft_lower for s in ["photoshop", "gimp", "lightroom", "affinity", "canva"]):
-                        metadata["editing_signatures"].append(f"Image was saved by editing software: {val_str}")
+                        metadata["generator_signatures"].append(f"Editing software signature: {val_str}")
                     elif any(s in soft_lower for s in ["midjourney", "stable diffusion", "dall-e", "adobe firefly"]):
                         metadata["generator_signatures"].append(f"AI generator software signature: {val_str}")
                 elif tag_name in ("DateTime", "DateTimeOriginal"):

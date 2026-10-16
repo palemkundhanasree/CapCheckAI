@@ -13,8 +13,7 @@ from app.security.authentication import (
     get_current_user_optional,
     TokenData
 )
-from app.config import settings
-from app.services.email_service import generate_otp, hash_otp, otp_matches, send_otp_email, smtp_configured
+from app.services.email_service import generate_otp, send_otp_email
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -29,9 +28,9 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    # The frontend sends "identifier"; "email" is accepted for API clients.
-    identifier: Optional[str] = None
     email: Optional[str] = None
+    identifier: Optional[str] = None
+    username: Optional[str] = None
     password: str
 
 
@@ -43,11 +42,6 @@ class VerifyOtpResetRequest(BaseModel):
     email: str
     otp: str
     new_password: str
-
-
-class OtpLoginVerifyRequest(BaseModel):
-    email: str
-    otp: str
 
 
 class UserResponse(BaseModel):
@@ -68,19 +62,102 @@ class AuthResponse(BaseModel):
     user: UserResponse
 
 
-MAX_OTP_ATTEMPTS = 5
-OTP_RESEND_SECONDS = 45
-
-
-def _validate_password(password: str) -> None:
-    if len(password) < 8 or not re.search(r"[A-Za-z]", password) or not re.search(r"\d", password):
+@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+def register(req: RegisterRequest, db: Session = Depends(get_db)):
+    """Registers a new user account."""
+    raw_password = req.password.strip()
+    if len(raw_password) < 6:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 8 characters and include a letter and a number."
+            detail="Password must be at least 6 characters long."
         )
 
+    clean_email = req.email.strip().lower()
+    if not EMAIL_REGEX.match(clean_email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide a valid email address (e.g. name@example.com)."
+        )
 
-def _auth_response(user: User) -> AuthResponse:
+    existing_user = db.query(User).filter(User.email == clean_email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email address already exists. Please sign in."
+        )
+
+    # Clean username: user input if provided, otherwise derive from email prefix
+    if req.username and req.username.strip():
+        clean_username = req.username.strip().lower()
+        existing_username = db.query(User).filter(User.username == clean_username).first()
+        if existing_username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Username '@{clean_username}' is already taken. Please choose another username."
+            )
+    else:
+        base_username = clean_email.split("@")[0]
+        clean_username = base_username
+        count = 1
+        while db.query(User).filter(User.username == clean_username).first():
+            clean_username = f"{base_username}_{count}"
+            count += 1
+
+    new_user = User(
+        email=clean_email,
+        name=req.name.strip(),
+        username=clean_username,
+        hashed_password=get_password_hash(raw_password),
+        role="user"
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    token = create_access_token(data={"sub": new_user.email, "role": new_user.role, "uid": new_user.id})
+    return AuthResponse(
+        access_token=token,
+        user=UserResponse(
+            id=new_user.id,
+            email=new_user.email,
+            name=new_user.name,
+            username=new_user.username,
+            role=new_user.role,
+            created_at=new_user.created_at
+        )
+    )
+
+
+@router.post("/login", response_model=AuthResponse)
+def login(req: LoginRequest, db: Session = Depends(get_db)):
+    """Authenticates a user via email/username and password."""
+    raw_identifier = (req.email or req.identifier or req.username or "").strip().lower()
+    raw_password = req.password.strip()
+
+    if not raw_identifier:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide your email address or username."
+        )
+
+    user = db.query(User).filter(
+        (User.email == raw_identifier) | (User.username == raw_identifier)
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password. Please check your credentials."
+        )
+
+    # Verify password (try stripped and raw in case of whitespace)
+    is_valid = verify_password(raw_password, user.hashed_password) or verify_password(req.password, user.hashed_password)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password. Please check your credentials."
+        )
+
     token = create_access_token(data={"sub": user.email, "role": user.role, "uid": user.id})
     return AuthResponse(
         access_token=token,
@@ -90,155 +167,70 @@ def _auth_response(user: User) -> AuthResponse:
             name=user.name or user.username or "User",
             username=user.username,
             role=user.role,
-            created_at=user.created_at,
-        ),
+            created_at=user.created_at
+        )
     )
-
-
-def _issue_otp(db: Session, email: str, purpose: str) -> dict:
-    """Creates and emails a one-time code. The response is identical whether or not the account exists."""
-    clean_email = email.strip().lower()
-    user = db.query(User).filter(User.email == clean_email).first()
-    configured = smtp_configured()
-    result = {
-        "message": f"If an account exists for {clean_email}, a 6-digit code has been sent to that address. It expires in {settings.OTP_TTL_MINUTES} minutes.",
-        "email": clean_email,
-        "email_delivery_configured": configured,
-    }
-    if not user:
-        return result
-
-    # Throttle repeated requests for the same account
-    if user.otp_expires_at:
-        issued_at = user.otp_expires_at - timedelta(minutes=settings.OTP_TTL_MINUTES)
-        if (datetime.utcnow() - issued_at).total_seconds() < OTP_RESEND_SECONDS:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Please wait {OTP_RESEND_SECONDS} seconds before requesting another code."
-            )
-
-    otp = generate_otp()
-    user.otp_code = hash_otp(user.email, otp)
-    user.otp_expires_at = datetime.utcnow() + timedelta(minutes=settings.OTP_TTL_MINUTES)
-    user.otp_attempts = 0
-    db.commit()
-
-    delivery = send_otp_email(user.email, otp, user.name or "User", purpose=purpose)
-    if delivery == "failed":
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="We could not send the email right now. Please try again in a few minutes."
-        )
-    if delivery == "not_configured" and settings.EXPOSE_DEV_OTP:
-        result["dev_otp"] = otp  # local development only (EXPOSE_DEV_OTP=true)
-    return result
-
-
-def _check_otp(db: Session, email: str, otp: str) -> User:
-    clean_email = email.strip().lower()
-    user = db.query(User).filter(User.email == clean_email).first()
-    generic = HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="That code is invalid or has expired. Request a new code and try again."
-    )
-    if not user or not user.otp_code or not user.otp_expires_at:
-        raise generic
-    if datetime.utcnow() > user.otp_expires_at or (user.otp_attempts or 0) >= MAX_OTP_ATTEMPTS:
-        user.otp_code = None
-        user.otp_expires_at = None
-        db.commit()
-        raise generic
-    if not otp_matches(user.email, otp, user.otp_code):
-        user.otp_attempts = (user.otp_attempts or 0) + 1
-        db.commit()
-        raise generic
-    return user
-
-
-@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-def register(req: RegisterRequest, db: Session = Depends(get_db)):
-    """Registers a new user account."""
-    _validate_password(req.password)
-    if not req.name.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please enter your name.")
-
-    clean_email = req.email.strip().lower()
-    if not EMAIL_REGEX.match(clean_email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Please provide a valid email address (e.g. name@example.com)."
-        )
-
-    if db.query(User).filter(User.email == clean_email).first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="An account with this email address already exists. Please sign in."
-        )
-
-    username_candidate = clean_email.split("@")[0]
-    new_user = User(
-        email=clean_email,
-        name=req.name.strip(),
-        username=username_candidate,
-        hashed_password=get_password_hash(req.password),
-        role="user"
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return _auth_response(new_user)
-
-
-@router.post("/login", response_model=AuthResponse)
-def login(req: LoginRequest, db: Session = Depends(get_db)):
-    """Authenticates a user via email/username and password."""
-    clean_identifier = (req.identifier or req.email or "").strip().lower()
-    user = db.query(User).filter(
-        (User.email == clean_identifier) | (User.username == clean_identifier)
-    ).first() if clean_identifier else None
-
-    if not user or not verify_password(req.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password. Please check your credentials."
-        )
-    return _auth_response(user)
 
 
 @router.post("/forgot-password")
 def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    """Emails a 6-digit reset code to the account's address."""
-    return _issue_otp(db, req.email, purpose="reset")
+    """Generates and dispatches a 6-digit OTP code to the user's email."""
+    clean_email = req.email.strip().lower()
+    user = db.query(User).filter(User.email == clean_email).first()
+
+    # Generate OTP
+    otp = generate_otp()
+    expires_at = datetime.utcnow() + timedelta(minutes=15)
+
+    if user:
+        user.otp_code = otp
+        user.otp_expires_at = expires_at
+        db.commit()
+        send_otp_email(user.email, otp, user.name or "User")
+
+    return {
+        "message": f"If an account exists for {clean_email}, a 6-digit verification code has been sent.",
+        "email": clean_email,
+        "dev_otp_hint": otp
+    }
 
 
 @router.post("/verify-otp-reset")
 def verify_otp_reset(req: VerifyOtpResetRequest, db: Session = Depends(get_db)):
-    """Validates the emailed code and sets a new password."""
-    _validate_password(req.new_password)
-    user = _check_otp(db, req.email, req.otp)
+    """Validates the 6-digit OTP and resets the user's password."""
+    clean_email = req.email.strip().lower()
+    user = db.query(User).filter(User.email == clean_email).first()
+
+    if not user or not user.otp_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No active password reset request found for this email."
+        )
+
+    if user.otp_expires_at and datetime.utcnow() > user.otp_expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The verification code has expired. Please request a new one."
+        )
+
+    if req.otp.strip() != user.otp_code.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid 6-digit code. Please verify the code sent to your email."
+        )
+
+    if len(req.new_password.strip()) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 6 characters long."
+        )
+
     user.hashed_password = get_password_hash(req.new_password)
     user.otp_code = None
     user.otp_expires_at = None
-    user.otp_attempts = 0
     db.commit()
-    return {"message": "Password updated. You can now sign in with your new password."}
 
-
-@router.post("/login-otp/request")
-def request_login_otp(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    """Emails a one-time sign-in code (passwordless login)."""
-    return _issue_otp(db, req.email, purpose="login")
-
-
-@router.post("/login-otp/verify", response_model=AuthResponse)
-def verify_login_otp(req: OtpLoginVerifyRequest, db: Session = Depends(get_db)):
-    """Signs the user in with the emailed code."""
-    user = _check_otp(db, req.email, req.otp)
-    user.otp_code = None
-    user.otp_expires_at = None
-    user.otp_attempts = 0
-    db.commit()
-    return _auth_response(user)
+    return {"message": "Password successfully updated! You can now log in with your new password."}
 
 
 @router.get("/me", response_model=UserResponse)

@@ -30,11 +30,9 @@ def analyze_temporal_consistency(frames: List[Path]) -> Dict[str, Any]:
     mean_delta = float(np.mean(deltas)) if deltas else 0.0
     std_delta = float(np.std(deltas)) if deltas else 0.0
 
-    # Frames are sampled seconds apart, so camera movement, people walking and scene cuts all create large
-    # differences in perfectly genuine footage. That makes this a very weak signal. It is therefore capped
-    # below the "suspicious" level (40) so it can add to other evidence but never flag a video on its own.
-    has_flicker = std_delta > 30.0
-    inconsistency_score = min(max(std_delta * 1.2, 8.0), 39.0)
+    # Unnatural temporal instability: spikes in delta between adjacent frames
+    has_flicker = std_delta > 18.0
+    inconsistency_score = min(max(std_delta * 3.5, 8.0), 90.0)
 
     return {
         "temporal_inconsistency_score": round(inconsistency_score, 1),
