@@ -23,6 +23,22 @@ const STATUS_STYLE: Record<CardStatus, { text: string; bar: string; chip: string
     text: 'text-slate-600', bar: 'bg-slate-300', chip: 'bg-slate-50 text-slate-700 border-slate-200', label: 'No result',
     icon: <HelpCircle className="w-4 h-4 text-slate-500" />,
   },
+  success: {
+    text: 'text-green-700', bar: 'bg-green-600', chip: 'bg-green-50 text-green-800 border-green-200', label: 'Verified Real',
+    icon: <CheckCircle className="w-4 h-4 text-green-600" />,
+  },
+  warning: {
+    text: 'text-orange-700', bar: 'bg-orange-500', chip: 'bg-orange-50 text-orange-800 border-orange-200', label: 'Uncertain',
+    icon: <AlertTriangle className="w-4 h-4 text-orange-600" />,
+  },
+  danger: {
+    text: 'text-red-700', bar: 'bg-red-600', chip: 'bg-red-50 text-red-800 border-red-200', label: 'Warning signs',
+    icon: <XCircle className="w-4 h-4 text-red-600" />,
+  },
+  info: {
+    text: 'text-slate-600', bar: 'bg-slate-300', chip: 'bg-slate-50 text-slate-700 border-slate-200', label: 'Info',
+    icon: <HelpCircle className="w-4 h-4 text-slate-500" />,
+  },
 };
 
 const GRADE_COLOR: Record<string, string> = {
@@ -37,9 +53,9 @@ function fallbackCard(report: VerificationReport) {
     overall_percent: pct,
     grade,
     grade_label: pct == null ? 'Not enough reliable evidence to give a percentage' : 'Estimated from the stored result',
-    confidence_score: report.confidence_score,
-    confidence_level: report.confidence_level,
-    sections: [],
+    confidence_score: report.confidence_score ?? 0,
+    confidence_level: report.confidence_level ?? 'MEDIUM',
+    sections: [] as any[],
     how_calculated: '',
     explanation: report.correctness_explanation || '',
     caveats: ['This report was saved before per-test breakdowns were available. Run the check again to see them.'],
@@ -47,10 +63,21 @@ function fallbackCard(report: VerificationReport) {
 }
 
 export const ReportCard: React.FC<ReportCardProps> = ({ report }) => {
-  const card = report.report_card || fallbackCard(report);
-  const pct = card.overall_percent;
+  const rawCard = report.report_card;
+  const fallback = fallbackCard(report);
+
+  const pct = rawCard?.overall_percent ?? rawCard?.score ?? report.correctness_score ?? null;
+  const grade = rawCard?.grade || (pct != null ? (pct >= 85 ? 'A' : pct >= 70 ? 'B' : pct >= 55 ? 'C' : pct >= 40 ? 'D' : 'F') : fallback.grade);
+  const grade_label = rawCard?.grade_label || (rawCard?.summary ?? fallback.grade_label);
+  const confidence_score = rawCard?.confidence_score ?? report.confidence_score ?? 0;
+  const confidence_level = String(rawCard?.confidence_level ?? report.confidence_level ?? 'MEDIUM');
+  const sections = Array.isArray(rawCard?.sections) ? rawCard.sections : fallback.sections;
+  const how_calculated = rawCard?.how_calculated || fallback.how_calculated;
+  const explanation = rawCard?.explanation || report.correctness_explanation || fallback.explanation;
+  const caveats = Array.isArray(rawCard?.caveats) ? rawCard.caveats : fallback.caveats;
+
   const overallStatus: CardStatus = pct == null ? 'unknown' : pct >= 70 ? 'good' : pct >= 40 ? 'warn' : 'bad';
-  const style = STATUS_STYLE[overallStatus];
+  const style = STATUS_STYLE[overallStatus] || STATUS_STYLE.unknown;
 
   return (
     <section className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden" aria-label="Report card">
@@ -63,15 +90,15 @@ export const ReportCard: React.FC<ReportCardProps> = ({ report }) => {
         {/* Overall grade + percentage */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-5">
           <div
-            className={`w-20 h-20 rounded-xl flex items-center justify-center text-white text-4xl font-bold flex-shrink-0 ${GRADE_COLOR[card.grade] || 'bg-slate-400'}`}
-            aria-label={`Grade ${card.grade}`}
+            className={`w-20 h-20 rounded-xl flex items-center justify-center text-white text-4xl font-bold flex-shrink-0 ${GRADE_COLOR[grade] || 'bg-slate-400'}`}
+            aria-label={`Grade ${grade}`}
           >
-            {card.grade}
+            {grade}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className={`text-4xl font-bold ${style.text}`}>{pct == null ? '—' : `${Math.round(pct)}%`}</span>
-              <span className="text-sm font-medium text-slate-700">{card.grade_label}</span>
+              <span className="text-sm font-medium text-slate-700">{grade_label}</span>
             </div>
             {pct != null && (
               <div className="mt-2 h-2.5 rounded-full bg-slate-200 overflow-hidden" role="img"
@@ -81,18 +108,19 @@ export const ReportCard: React.FC<ReportCardProps> = ({ report }) => {
             )}
             <p className="mt-2 text-xs text-slate-500">
               How sure the system is about this result: <span className="font-semibold text-slate-700">
-                {Math.round(card.confidence_score)}% ({card.confidence_level.toLowerCase()} confidence)</span>
+                {Math.round(confidence_score)}% ({confidence_level.toLowerCase()} confidence)</span>
             </p>
           </div>
         </div>
 
         {/* Per-test breakdown */}
-        {card.sections.length > 0 && (
+        {sections.length > 0 && (
           <div>
             <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-3">What each check found</h4>
             <ul className="space-y-3">
-              {card.sections.map((sec) => {
-                const st = STATUS_STYLE[sec.status] || STATUS_STYLE.unknown;
+              {sections.map((sec: any) => {
+                const secStatus = (sec.status as CardStatus) || 'unknown';
+                const st = STATUS_STYLE[secStatus] || STATUS_STYLE.unknown;
                 return (
                   <li key={sec.key} className="rounded-md border border-slate-200 p-3">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -123,13 +151,13 @@ export const ReportCard: React.FC<ReportCardProps> = ({ report }) => {
         {/* Explanation of the number */}
         <div className="rounded-md bg-slate-50 border border-slate-200 p-4 space-y-2">
           <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide">How this percentage was worked out</h4>
-          {card.how_calculated && <p className="text-sm text-slate-700 leading-relaxed">{card.how_calculated}</p>}
-          {card.explanation && <p className="text-sm text-slate-700 leading-relaxed">{card.explanation}</p>}
+          {how_calculated && <p className="text-sm text-slate-700 leading-relaxed">{how_calculated}</p>}
+          {explanation && <p className="text-sm text-slate-700 leading-relaxed">{explanation}</p>}
         </div>
 
-        {card.caveats.length > 0 && (
+        {caveats.length > 0 && (
           <ul className="text-xs text-slate-500 space-y-1 list-disc pl-4">
-            {card.caveats.map((c, i) => <li key={i}>{c}</li>)}
+            {caveats.map((c: string, i: number) => <li key={i}>{c}</li>)}
           </ul>
         )}
       </div>

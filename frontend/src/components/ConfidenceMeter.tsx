@@ -2,12 +2,12 @@ import React from 'react';
 import { Shield, CheckCircle, AlertTriangle, HelpCircle } from 'lucide-react';
 
 interface ConfidenceMeterProps {
-  score: number;
-  level: 'LOW' | 'MEDIUM' | 'HIGH';
+  score?: number;
+  level?: 'LOW' | 'MEDIUM' | 'HIGH' | string;
   className?: string;
 }
 
-export const ConfidenceMeter: React.FC<ConfidenceMeterProps> = ({ score, level, className = '' }) => {
+export const ConfidenceMeter: React.FC<ConfidenceMeterProps> = ({ score = 0, level = 'MEDIUM', className = '' }) => {
   const getStyle = () => {
     if (level === 'HIGH') {
       return {
