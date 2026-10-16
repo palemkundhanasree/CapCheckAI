@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Dict, Any, List
 
 
@@ -19,7 +20,7 @@ def evaluate_image_context(
         if user_context and any(recent in user_context.lower() for recent in ["breaking", "just now", "today", "yesterday"]):
             # If the image timestamp is from years ago but claimed as breaking
             year = date_time[:4]
-            if year.isdigit() and int(year) < 2024:
+            if year.isdigit() and int(year) < datetime.utcnow().year - 1:
                 is_misleading = True
                 findings.append(f"Potential out-of-context recycling: metadata indicates capture year {year}, but claimed as recent event.")
 

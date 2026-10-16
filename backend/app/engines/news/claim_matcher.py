@@ -48,10 +48,10 @@ def compute_evidence_stance(claim_text: str, evidence_snippet: str, existing_sta
     snippet_tokens = tokenize_clean(evidence_snippet)
     if claim_tokens:
         overlap_ratio = len(claim_tokens.intersection(snippet_tokens)) / len(claim_tokens)
-        if overlap_ratio >= 0.40:
+        if overlap_ratio >= 0.60:
             return "SUPPORTS"
 
-    return "CONTEXT"
+    return "NEUTRAL"
 
 
 def match_and_score_evidence(claim_text: str, evidence_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -66,7 +66,13 @@ def match_and_score_evidence(claim_text: str, evidence_list: List[Dict[str, Any]
         overlap = len(claim_tokens.intersection(corpus_tokens))
         relevance_ratio = overlap / max(len(claim_tokens), 1)
 
-        refined_stance = compute_evidence_stance(claim_text, text_corpus, item.get("stance", "NEUTRAL"))
+        if item.get("kind") == "reference":
+            # Encyclopedia/background hits show context only; they never count as proof either way.
+            refined_stance = "NEUTRAL"
+        elif item.get("kind") in ("factcheck", "news", "knowledge"):
+            refined_stance = item.get("stance", "NEUTRAL")  # already judged against the source text
+        else:
+            refined_stance = compute_evidence_stance(claim_text, text_corpus, item.get("stance", "NEUTRAL"))
 
         item_copy = dict(item)
         item_copy["stance"] = refined_stance

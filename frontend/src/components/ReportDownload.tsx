@@ -12,6 +12,23 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ reportId, onDele
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const handleDownload = async () => {
+    setError(null);
+    try {
+      const blob = await reportApi.getPdfBlob(reportId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `CapCheck_Report_${reportId.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err.message || 'Could not download the report.');
+    }
+  };
+
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
@@ -36,21 +53,21 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ reportId, onDele
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-white border border-slate-200 shadow-sm">
       <div className="flex items-center space-x-2.5">
-        <a
-          href={reportApi.getPdfDownloadUrl(reportId)}
-          download
+        <button
+          type="button"
+          onClick={handleDownload}
           className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium shadow-xs transition-colors cursor-pointer"
         >
           <Download className="w-3.5 h-3.5" />
-          <span>Download PDF Forensic Report</span>
-        </a>
+          <span>Download PDF Report</span>
+        </button>
 
         <button
           onClick={handleShare}
           className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-md bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 transition-colors cursor-pointer"
         >
           {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Share2 className="w-3.5 h-3.5 text-slate-500" />}
-          <span>{copied ? 'Link Copied!' : 'Share Audit Link'}</span>
+          <span>{copied ? 'Link copied' : 'Copy link (you only)'}</span>
         </button>
       </div>
 

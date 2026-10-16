@@ -1,4 +1,5 @@
 import os
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -14,7 +15,8 @@ from app.engines.news.claim_extractor import extract_claims_from_text
 from app.engines.news.article_extractor import extract_article_content
 from app.engines.news.factcheck_client import search_curated_factchecks, query_google_factcheck_api
 from app.engines.news.search_client import search_web_evidence
-from app.services.evidence_evaluator import EvidenceEvaluatorService
+from app.engines.news.gemini_client import check_claim_with_gemini, is_configured as gemini_configured
+from app.services.evidence_evaluator import EvidenceEvaluatorService, gather_claim_evidence
 
 # Image Engines
 from app.engines.image.image_validator import validate_image_file
@@ -50,6 +52,51 @@ from app.services.verdict_engine import VerdictEngine
 logger = logging.getLogger(__name__)
 
 
+def merge_claim_into_media(synthesis, factual_verdict, claim_text):
+    """If the caption/spoken claim is contradicted by sources, say so even when the media itself looks genuine."""
+    if factual_verdict in ("CONTRADICTED", "MOSTLY_CONTRADICTED") and synthesis.overall_verdict in ("AUTHENTIC", "INCONCLUSIVE", "SUSPICIOUS", "MISLEADING_CONTEXT"):
+        synthesis.overall_verdict = "MISLEADING_CONTEXT"
+        synthesis.verdict_label = "Claim attached to this media is contradicted by sources"
+        synthesis.summary = f'The media may be genuine, but the claim made about it ("{claim_text[:140]}") is contradicted by the sources reviewed.'
+        synthesis.explanation = f"**Quick Summary**: {synthesis.summary}\n\n" + synthesis.explanation.split("\n\n", 1)[-1]
+    elif factual_verdict in ("SUPPORTED", "MOSTLY_SUPPORTED"):
+        synthesis.explanation += f'\n\n**Caption/claim check**: sources support the claim "{claim_text[:140]}".'
+    return synthesis
+
+
+def _join(indicators, limit: int = 420) -> str:
+    text = "; ".join(str(i) for i in indicators if i)
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
+
+def image_report_card_details(ai_res, manip_res, metadata, c2pa_res):
+    """One entry per image test: risk 0-100 (None = the test could not judge) plus a plain-language reason."""
+    ela = manip_res.get("ela", {})
+    editing = metadata.get("editing_signatures", [])
+    manip_risk = manip_res["manipulation_score"]
+    if not ela.get("applicable", True) and not editing:
+        manip_risk = None  # nothing was actually measured, so do not present the baseline as a result
+
+    if c2pa_res.get("is_ai_declared"):
+        prov_risk, prov_detail = 98.0, "Content Credentials in the file declare it was made by AI."
+    elif metadata.get("generator_signatures"):
+        prov_risk, prov_detail = 96.0, _join(metadata["generator_signatures"])
+    elif c2pa_res.get("has_c2pa"):
+        prov_risk, prov_detail = 8.0, "The file carries Content Credentials (C2PA) and they do not declare AI generation."
+    elif metadata.get("camera_make") or metadata.get("camera_model"):
+        cam = f"{metadata.get('camera_make') or ''} {metadata.get('camera_model') or ''}".strip()
+        prov_risk, prov_detail = 12.0, f"The file names a physical camera ({cam}). Tags can be copied, so this lowers risk but proves nothing."
+    else:
+        prov_risk, prov_detail = None, "No camera data or Content Credentials in the file. Many apps strip these, so this is neutral and was not counted."
+
+    return [
+        {"key": "ai_generation", "title": "AI-generation tests", "risk": ai_res["ai_generated_score"], "detail": _join(ai_res.get("indicators", []))},
+        {"key": "manipulation", "title": "Editing / pasted-region test", "risk": manip_risk,
+         "detail": _join(manip_res.get("indicators", [])) or ela.get("note", "")},
+        {"key": "provenance", "title": "Camera & provenance data", "risk": prov_risk, "detail": prov_detail},
+    ]
+
+
 class VerificationOrchestrator:
     def __init__(self, db: Session):
         self.db = db
@@ -63,25 +110,22 @@ class VerificationOrchestrator:
             claims = extract_claims_from_text(claim_text, max_claims=3)
             primary_claim = claims[0]["claim_text"] if claims else claim_text
 
-            self.job_repo.update_progress(job_id, 35, "Querying international fact-checking databases")
-            evidence = []
-            curated_hits = search_curated_factchecks(primary_claim)
-            evidence.extend(curated_hits)
-
-            google_hits = await query_google_factcheck_api(primary_claim)
-            evidence.extend(google_hits)
-
-            self.job_repo.update_progress(job_id, 55, "Searching authoritative encyclopedia & reference indices")
-            if len(evidence) < 2:
-                wiki_hits = await search_web_evidence(primary_claim)
-                evidence.extend(wiki_hits)
-
-            self.job_repo.update_progress(job_id, 75, "Evaluating source credibility and stance weighting")
-            scored_evidence = EvidenceEvaluatorService.evaluate_and_rank_evidence(primary_claim, evidence)
+            self.job_repo.update_progress(job_id, 35, "Asking Gemini AI and searching fact-checkers and live news")
+            (scored_evidence, unavailable), gemini_res = await asyncio.gather(
+                gather_claim_evidence(primary_claim),
+                check_claim_with_gemini(claim_text, context),
+            )
+            unavailable = list(unavailable)
+            ai_analysis = gemini_res if gemini_res.get("ok") else None
+            if not ai_analysis:
+                unavailable.append(f"Gemini AI check ({gemini_res.get('error', 'unavailable')})")
+            self.job_repo.update_progress(job_id, 75, "Weighing Gemini's answer and each source by reliability")
 
             factual_verdict = VerdictEngine.evaluate_claim_verdict(scored_evidence)
+            if ai_analysis and ai_analysis["verdict"] != "UNVERIFIABLE":
+                factual_verdict = ai_analysis["factual_verdict"]
 
-            self.job_repo.update_progress(job_id, 90, "Synthesizing final verdict and confidence score")
+            self.job_repo.update_progress(job_id, 90, "Building the percentage evaluation table")
             synthesis = VerdictEngine.synthesize_overall_verdict(
                 input_type="claim",
                 factual_verdict=factual_verdict,
@@ -89,25 +133,35 @@ class VerificationOrchestrator:
                 context_verdict=None,
                 evidence_items=scored_evidence,
                 detector_scores=[],
-                indicators=[]
+                indicators=[],
+                ai_analysis=ai_analysis
             )
+
+            if ai_analysis:
+                for src in ai_analysis.get("sources", []):
+                    scored_evidence.append({
+                        "title": src["title"][:200], "source_name": "Google Search (via Gemini)",
+                        "source_url": src["url"], "publisher": src["title"][:80],
+                        "snippet": "Page Gemini consulted while checking this statement.",
+                        "stance": "CONTEXT", "credibility_score": 60.0,
+                    })
 
             limitations = [
                 "Fact-checking depends on publicly indexed records and verified news databases.",
                 "Emerging or hyper-local claims may have insufficient public documentation.",
-                "Automated stance analysis uses lexical and semantic indicators."
+                "Automated stance analysis uses lexical and semantic indicators.",
+                "Gemini's percentage is an AI estimate and can be wrong, especially for very recent events."
             ]
-            checks_performed = [
-                "International Fact Check Database Query",
-                "Google FactCheck Tools API Query",
-                "Wikipedia Knowledge Reference Retrieval",
-                "Source Credibility & Weighting Assessment",
-                "Lexical Stance Classification"
+            checks_performed = (["Google Gemini AI fact-check with percentage evaluation"] if ai_analysis else []) + [
+                "Curated fact-check library match",
+                "Live news search (GDELT, Google News) with article text reading",
+                "Encyclopedia background references (context only, not proof)",
+                "Source reliability weighting and independence check",
             ]
 
             report = self.report_repo.create_report(
                 job_id=job_id,
-                title=f"Claim: {primary_claim[:60]}...",
+                title=f"Claim: {primary_claim[:60]}",
                 input_type="claim",
                 input_preview=claim_text,
                 overall_verdict=synthesis.overall_verdict,
@@ -116,9 +170,12 @@ class VerificationOrchestrator:
                 confidence_level=synthesis.confidence_level.value,
                 summary=synthesis.summary,
                 explanation=synthesis.explanation,
+                correctness_score=synthesis.correctness_score,
+                correctness_explanation=synthesis.correctness_explanation,
+                report_card=synthesis.report_card,
                 limitations=limitations,
                 checks_performed=checks_performed,
-                checks_unavailable=[],
+                checks_unavailable=unavailable,
                 factual_claim_verdict=factual_verdict,
                 evidence_items=scored_evidence
             )
@@ -141,19 +198,9 @@ class VerificationOrchestrator:
             claims = extract_claims_from_text(text_corpus, max_claims=4)
             primary_claim = claims[0]["claim_text"] if claims else article["title"]
 
-            self.job_repo.update_progress(job_id, 55, "Cross-referencing claims against independent fact-checking records")
-            evidence = []
-            curated_hits = search_curated_factchecks(primary_claim)
-            evidence.extend(curated_hits)
-
-            google_hits = await query_google_factcheck_api(primary_claim)
-            evidence.extend(google_hits)
-
-            wiki_hits = await search_web_evidence(primary_claim)
-            evidence.extend(wiki_hits)
-
-            self.job_repo.update_progress(job_id, 75, "Analyzing article publisher credibility and stance")
-            scored_evidence = EvidenceEvaluatorService.evaluate_and_rank_evidence(primary_claim, evidence)
+            self.job_repo.update_progress(job_id, 55, "Cross-referencing the article with fact-checkers and other news outlets")
+            scored_evidence, unavailable = await gather_claim_evidence(primary_claim)
+            self.job_repo.update_progress(job_id, 75, "Weighing each source by reliability and stance")
             factual_verdict = VerdictEngine.evaluate_claim_verdict(scored_evidence)
 
             self.job_repo.update_progress(job_id, 90, "Assembling verdict dossier")
@@ -173,27 +220,30 @@ class VerificationOrchestrator:
                 "Automated article extraction may omit dynamic client-rendered scripts."
             ]
             checks_performed = [
-                "SSRF-Safe Web Page Scraping",
-                "HTML Article Body & Metadata Extraction",
-                "Claim & Named Entity Extraction",
-                "Multi-Source Evidence Cross-Referencing",
-                "Publisher Credibility Assessment"
+                "Safe retrieval and reading of the submitted article",
+                "Extraction of the main checkable claim",
+                "Curated fact-check library match",
+                "Live news search with article text reading",
+                "Source reliability weighting and independence check",
             ]
 
             report = self.report_repo.create_report(
                 job_id=job_id,
                 title=f"Article: {article['title'][:60]}",
                 input_type="url",
-                input_preview=f"{article['title']} ({url})",
+                input_preview=f"{article['title']} — {url}",
                 overall_verdict=synthesis.overall_verdict,
                 verdict_label=synthesis.verdict_label,
                 confidence_score=synthesis.confidence_score,
                 confidence_level=synthesis.confidence_level.value,
                 summary=synthesis.summary,
                 explanation=synthesis.explanation,
+                correctness_score=synthesis.correctness_score,
+                correctness_explanation=synthesis.correctness_explanation,
+                report_card=synthesis.report_card,
                 limitations=limitations,
                 checks_performed=checks_performed,
-                checks_unavailable=[],
+                checks_unavailable=unavailable,
                 factual_claim_verdict=factual_verdict,
                 evidence_items=scored_evidence
             )
@@ -219,32 +269,45 @@ class VerificationOrchestrator:
             ai_res = detect_ai_generation(file_path, pil_img, metadata=metadata)
 
             self.job_repo.update_progress(job_id, 75, "Performing Error Level Analysis (ELA) for manipulation")
-            manip_res = detect_image_manipulation(file_path, pil_img)
+            manip_res = detect_image_manipulation(file_path, pil_img, metadata)
             similarity = find_similar_images_fingerprint(pil_img)
             context_res = evaluate_image_context(metadata, ai_res, manip_res, user_context or "")
 
             all_indicators = list(ai_res.get("indicators", [])) + list(manip_res.get("indicators", []))
             if metadata.get("generator_signatures"):
                 all_indicators.extend(metadata["generator_signatures"])
+            for sig in metadata.get("editing_signatures", []):
+                if sig not in all_indicators:
+                    all_indicators.append(sig)
 
             media_verdict = VerdictEngine.evaluate_media_authenticity(
                 ai_score=ai_res["ai_generated_score"],
                 manipulation_score=manip_res["manipulation_score"],
                 indicators=all_indicators,
                 has_c2pa=c2pa_res["has_c2pa"],
-                is_c2pa_ai=c2pa_res["is_ai_declared"]
+                is_c2pa_ai=c2pa_res["is_ai_declared"],
+                has_provenance=bool(metadata.get("camera_make") or metadata.get("camera_model"))
             )
+
+            caption_evidence, caption_unavailable, caption_verdict = [], [], None
+            if user_context and len(user_context.strip()) >= 8:
+                self.job_repo.update_progress(job_id, 82, "Checking the caption/claim against fact-checkers and live news")
+                caption_evidence, caption_unavailable = await gather_claim_evidence(user_context.strip())
+                caption_verdict = VerdictEngine.evaluate_claim_verdict(caption_evidence)
 
             self.job_repo.update_progress(job_id, 90, "Synthesizing multi-modal media verdict")
             synthesis = VerdictEngine.synthesize_overall_verdict(
                 input_type="image",
-                factual_verdict=None,
+                factual_verdict=caption_verdict,
                 media_verdict=media_verdict,
                 context_verdict=context_res.get("context_verdict"),
-                evidence_items=[],
+                evidence_items=caption_evidence,
                 detector_scores=[ai_res["ai_generated_score"], manip_res["manipulation_score"]],
-                indicators=all_indicators
+                indicators=all_indicators,
+                detector_details=image_report_card_details(ai_res, manip_res, metadata, c2pa_res)
             )
+            if caption_verdict:
+                synthesis = merge_claim_into_media(synthesis, caption_verdict, user_context.strip())
 
             checks_performed = [
                 "File Signature & Integrity Validation",
@@ -254,11 +317,13 @@ class VerificationOrchestrator:
                 "Sensor PRNU Noise Residual Correlation",
                 "Error Level Analysis (ELA) Splicing Detection",
                 "Perceptual Difference & Average Hashing"
-            ]
+            ] + (["Caption/claim fact-check against live news and fact-checkers"] if caption_verdict else [])
             limitations = [
                 "Heuristic frequency detectors can be affected by aggressive social media recompression.",
                 "Absence of EXIF tags does not guarantee manipulation, as many platforms strip metadata.",
-                "Detection scores represent statistical anomaly likelihood, not legal certainty."
+                "Detection scores represent statistical anomaly likelihood, not legal certainty.",
+                "The built-in tests cannot reliably recognise modern AI images that carry no metadata or Content Credentials; a trained detection model is needed for that.",
+                "Error-level analysis only applies to JPEG photos and can give false hints on freshly resized or re-saved pictures."
             ]
 
             media_analysis_data = {
@@ -284,18 +349,23 @@ class VerificationOrchestrator:
                 job_id=job_id,
                 title=f"Image Analysis: {file_path.name[:40]}",
                 input_type="image",
-                input_preview=file_path.name,
+                input_preview=(f"{file_path.name}\nCaption: {user_context.strip()}" if user_context and user_context.strip() else file_path.name),
                 overall_verdict=synthesis.overall_verdict,
                 verdict_label=synthesis.verdict_label,
                 confidence_score=synthesis.confidence_score,
                 confidence_level=synthesis.confidence_level.value,
                 summary=synthesis.summary,
                 explanation=synthesis.explanation,
+                correctness_score=synthesis.correctness_score,
+                correctness_explanation=synthesis.correctness_explanation,
+                report_card=synthesis.report_card,
                 limitations=limitations,
                 checks_performed=checks_performed,
-                checks_unavailable=[],
+                checks_unavailable=["Reverse image search (needs an external image-search service)"] + caption_unavailable,
                 media_authenticity_verdict=media_verdict,
                 context_verdict=context_res.get("context_verdict"),
+                factual_claim_verdict=caption_verdict,
+                evidence_items=caption_evidence,
                 media_analysis_data=media_analysis_data
             )
 
@@ -319,20 +389,35 @@ class VerificationOrchestrator:
             self.job_repo.update_progress(job_id, 55, "Transcribing speech content and analyzing phonemes")
             transcription = transcribe_audio_file(file_path)
 
-            self.job_repo.update_progress(job_id, 70, "Detecting synthetic speech & voice cloning signatures")
-            synthetic_res = detect_synthetic_speech(waveform, meta)
-            cloning_res = detect_voice_cloning_deepfake(synthetic_res, waveform)
-            consistency = evaluate_speaker_consistency(waveform)
+            forensics_ok = bool(waveform.get("available"))
+            if forensics_ok:
+                self.job_repo.update_progress(job_id, 70, "Detecting synthetic speech & voice cloning signatures")
+                synthetic_res = detect_synthetic_speech(waveform, meta)
+                cloning_res = detect_voice_cloning_deepfake(synthetic_res, waveform)
+                consistency = evaluate_speaker_consistency(waveform)
+            else:
+                synthetic_res = {"synthetic_voice_probability": 0.0, "is_synthetic": False, "indicators": []}
+                cloning_res = {"cloning_probability": 0.0, "voice_cloning_detected": False, "indicators": []}
+                consistency = {"speaker_consistency_score": 0.0, "splicing_detected": False, "note": "Not analysed"}
 
             self.job_repo.update_progress(job_id, 85, "Cross-checking spoken claims against factual evidence")
             claim_check = await check_speech_factual_claims(transcription.get("full_transcript", ""))
+            audio_unavailable = list(claim_check.get("unavailable", []))
+            if not transcription.get("full_transcript"):
+                audio_unavailable.append("Speech transcription and spoken-claim check (install openai-whisper to enable)")
 
             all_indicators = list(cloning_res.get("indicators", []))
-            media_verdict = VerdictEngine.evaluate_media_authenticity(
-                ai_score=cloning_res["cloning_probability"],
-                manipulation_score=40.0 if consistency["splicing_detected"] else 10.0,
-                indicators=all_indicators
-            )
+            if forensics_ok:
+                media_verdict = VerdictEngine.evaluate_media_authenticity(
+                    ai_score=cloning_res["cloning_probability"],
+                    manipulation_score=40.0 if consistency["splicing_detected"] else 10.0,
+                    indicators=all_indicators
+                )
+                audio_scores = [cloning_res["cloning_probability"]]
+            else:
+                media_verdict = "INCONCLUSIVE"
+                audio_scores = []
+                audio_unavailable.append("Voice forensics (this audio could not be decoded; install ffmpeg or upload a WAV file)")
 
             self.job_repo.update_progress(job_id, 95, "Synthesizing audio verdict and speech claim status")
             synthesis = VerdictEngine.synthesize_overall_verdict(
@@ -341,9 +426,19 @@ class VerificationOrchestrator:
                 media_verdict=media_verdict,
                 context_verdict=None,
                 evidence_items=claim_check.get("evidence", []),
-                detector_scores=[cloning_res["cloning_probability"]],
-                indicators=all_indicators
+                detector_scores=audio_scores,
+                indicators=all_indicators,
+                detector_details=[
+                    {"key": "synthetic_voice", "title": "Synthetic / cloned voice tests",
+                     "risk": cloning_res["cloning_probability"] if forensics_ok else None,
+                     "detail": _join(all_indicators) if forensics_ok else "The audio could not be decoded, so these tests did not run."},
+                    {"key": "splicing", "title": "Speaker consistency / splicing",
+                     "risk": (40.0 if consistency.get("splicing_detected") else 10.0) if forensics_ok else None,
+                     "detail": consistency.get("note", "") if forensics_ok else "Not analysed."},
+                ]
             )
+            if claim_check.get("claim_verdict"):
+                synthesis = merge_claim_into_media(synthesis, claim_check["claim_verdict"], claim_check.get("primary_claim", ""))
 
             checks_performed = [
                 "Audio Header & Codec Parameter Probe",
@@ -390,9 +485,12 @@ class VerificationOrchestrator:
                 confidence_level=synthesis.confidence_level.value,
                 summary=synthesis.summary,
                 explanation=synthesis.explanation,
+                correctness_score=synthesis.correctness_score,
+                correctness_explanation=synthesis.correctness_explanation,
+                report_card=synthesis.report_card,
                 limitations=limitations,
                 checks_performed=checks_performed,
-                checks_unavailable=[],
+                checks_unavailable=audio_unavailable,
                 factual_claim_verdict=claim_check.get("claim_verdict"),
                 media_authenticity_verdict=media_verdict,
                 evidence_items=claim_check.get("evidence", []),
@@ -426,10 +524,24 @@ class VerificationOrchestrator:
             audio_analysis_res = None
             if audio_path:
                 wf = extract_waveform_features(audio_path)
-                syn = detect_synthetic_speech(wf, {})
-                audio_analysis_res = syn
+                if wf.get("available"):
+                    audio_analysis_res = detect_synthetic_speech(wf, {})
 
             lip_sync = check_lip_sync_consistency(audio_path is not None, frame_analyses)
+
+            transcript_text, video_claim, video_evidence, video_unavailable = "", {}, [], []
+            if audio_path:
+                transcription = transcribe_audio_file(audio_path)
+                transcript_text = transcription.get("full_transcript", "")
+                if transcript_text:
+                    video_claim = await check_speech_factual_claims(transcript_text)
+                    video_evidence = video_claim.get("evidence", [])
+                    video_unavailable = list(video_claim.get("unavailable", []))
+                else:
+                    video_unavailable.append("Speech transcription and spoken-claim check (install openai-whisper to enable)")
+            else:
+                video_unavailable.append("Audio track analysis (no audio stream or ffmpeg unavailable)")
+            video_unavailable.append("Lip-sync analysis (needs a face-landmark model)")
 
             self.job_repo.update_progress(job_id, 90, "Synthesizing multi-modal video forensics")
             aggregated = aggregate_video_findings(
@@ -449,13 +561,24 @@ class VerificationOrchestrator:
 
             synthesis = VerdictEngine.synthesize_overall_verdict(
                 input_type="video",
-                factual_verdict=None,
+                factual_verdict=video_claim.get("claim_verdict"),
                 media_verdict=media_verdict,
                 context_verdict=None,
-                evidence_items=[],
+                evidence_items=video_evidence,
                 detector_scores=[aggregated["deepfake_score"], aggregated["temporal_score"]],
-                indicators=all_indicators
+                indicators=all_indicators,
+                detector_details=[
+                    {"key": "frames", "title": "Frame-level AI artifact tests", "risk": aggregated["average_frame_artifact_score"],
+                     "detail": f"{aggregated['total_frames_analyzed']} frame(s) sampled; peak frame score {aggregated['peak_frame_score']}/100."},
+                    {"key": "temporal", "title": "Frame-to-frame consistency", "risk": aggregated["temporal_score"],
+                     "detail": "Weak signal: frames are sampled seconds apart, so normal movement and cuts also cause differences. It can add to other evidence but cannot flag a video alone."},
+                    {"key": "audio_voice", "title": "Audio track voice test",
+                     "risk": aggregated["audio_synthetic_score"] if audio_analysis_res else None,
+                     "detail": "Checked the audio track for synthetic-voice signs." if audio_analysis_res else "No usable audio track, so this test did not run."},
+                ]
             )
+            if video_claim.get("claim_verdict"):
+                synthesis = merge_claim_into_media(synthesis, video_claim["claim_verdict"], video_claim.get("primary_claim", ""))
 
             checks_performed = [
                 "Video Container & Stream Parameter Inspection",
@@ -463,7 +586,6 @@ class VerificationOrchestrator:
                 "Frame-Level Generative Artifact Analysis",
                 "Inter-Frame Illumination & Boundary Temporal Continuity",
                 "Audio Stream Extraction & Synthetic Voice Analysis",
-                "Lip Synchronization Consistency Check"
             ]
             limitations = [
                 "Heavy video compression (such as WhatsApp/TikTok transcoding) introduces blocking artifacts.",
@@ -500,11 +622,16 @@ class VerificationOrchestrator:
                 confidence_level=synthesis.confidence_level.value,
                 summary=synthesis.summary,
                 explanation=synthesis.explanation,
+                correctness_score=synthesis.correctness_score,
+                correctness_explanation=synthesis.correctness_explanation,
+                report_card=synthesis.report_card,
                 limitations=limitations,
                 checks_performed=checks_performed,
-                checks_unavailable=[],
+                checks_unavailable=video_unavailable,
                 media_authenticity_verdict=media_verdict,
-                media_analysis_data=media_analysis_data
+                factual_claim_verdict=video_claim.get("claim_verdict"),
+                evidence_items=video_evidence,
+                media_analysis_data={**media_analysis_data, "transcript": transcript_text or None}
             )
 
             self.job_repo.complete_job(job_id, report.id)

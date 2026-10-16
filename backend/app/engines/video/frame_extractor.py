@@ -72,15 +72,27 @@ def extract_video_frames(
     except Exception as e:
         logger.warning(f"Error during OpenCV frame extraction: {e}")
 
-    # Fallback if cv2 was unavailable or video format was unsupported
     if not frames_paths:
-        meta["method"] = "frame_proxy"
-        meta["duration_seconds"] = 12.0
-        # Generate 4 representative proxy frames to enable downstream pipeline testing
-        for i in range(4):
-            f_path = settings.TEMP_DIR / f"frame_{video_path.stem}_{i:03d}.jpg"
-            img = Image.new("RGB", (640, 360), color=((i * 45) % 255, (i * 70) % 255, 120))
-            img.save(f_path, "JPEG")
-            frames_paths.append(f_path)
+        frames_paths = _extract_frames_with_ffmpeg(video_path, max_frames)
+        if frames_paths:
+            meta.update({"method": "ffmpeg", "width": None, "height": None, "fps": None})
+
+    if not frames_paths:
+        raise ValueError(
+            "This video could not be analysed because no frames could be read. "
+            "Install OpenCV (pip install opencv-python-headless) or ffmpeg, or try an MP4 file."
+        )
 
     return frames_paths, meta
+
+
+def _extract_frames_with_ffmpeg(video_path: Path, max_frames: int) -> List[Path]:
+    """Fallback frame sampler (one frame every 2 seconds) using ffmpeg when OpenCV is unavailable."""
+    import subprocess
+    pattern = settings.TEMP_DIR / f"frame_{video_path.stem}_ff_%03d.jpg"
+    try:
+        subprocess.run(["ffmpeg", "-y", "-i", str(video_path), "-vf", "fps=0.5", "-frames:v", str(max_frames), str(pattern)],
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return []
+    return sorted(settings.TEMP_DIR.glob(f"frame_{video_path.stem}_ff_*.jpg"))

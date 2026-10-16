@@ -8,13 +8,14 @@ class JobRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_job(self, job_type: str, input_data: str = "") -> VerificationJob:
+    def create_job(self, job_type: str, input_data: str = "", user_id: Optional[str] = None) -> VerificationJob:
         job = VerificationJob(
             job_type=job_type,
             status="queued",
             progress=0,
             current_stage="Job received and queued",
-            input_data=input_data
+            input_data=input_data,
+            user_id=user_id
         )
         self.db.add(job)
         self.db.commit()
@@ -58,5 +59,8 @@ class JobRepository:
             self.db.refresh(job)
         return job
 
-    def get_recent_jobs(self, limit: int = 50) -> List[VerificationJob]:
-        return self.db.query(VerificationJob).order_by(VerificationJob.created_at.desc()).limit(limit).all()
+    def get_recent_jobs(self, limit: int = 50, user_id: Optional[str] = None) -> List[VerificationJob]:
+        q = self.db.query(VerificationJob)
+        if user_id:
+            q = q.filter(VerificationJob.user_id == user_id)
+        return q.order_by(VerificationJob.created_at.desc()).limit(limit).all()

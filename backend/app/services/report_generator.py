@@ -55,6 +55,41 @@ def generate_pdf_report(report_data: Dict[str, Any], output_path: Path) -> Path:
         elements.append(Paragraph(f"<b>Confidence:</b> {report_data.get('confidence_score', 0)}% ({report_data.get('confidence_level', 'N/A')})", body_style))
         elements.append(Spacer(1, 12))
 
+        # Report card: overall grade, percentage and per-test breakdown
+        card = report_data.get("report_card") or {}
+        pct = card.get("overall_percent", report_data.get("correctness_score"))
+        if card or pct is not None:
+            elements.append(Paragraph("<b>Report Card:</b>", styles["Heading3"]))
+            grade = card.get("grade", "?")
+            pct_text = "no percentage (not enough reliable evidence)" if pct is None else f"{round(pct)}% likely correct / genuine"
+            elements.append(Paragraph(f"<b>Grade {grade}</b> &mdash; {pct_text}. {card.get('grade_label', '')}", body_style))
+            sections = card.get("sections") or []
+            if sections:
+                rows = [["Check", "Result", "What it found"]]
+                for sec in sections:
+                    p_val = sec.get("percent")
+                    rows.append([
+                        Paragraph(str(sec.get("title", "")), body_style),
+                        "no result" if p_val is None else f"{round(p_val)}%",
+                        Paragraph(str(sec.get("detail", ""))[:260], body_style),
+                    ])
+                ct = Table(rows, colWidths=[130, 55, 335])
+                ct.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+                ]))
+                elements.append(Spacer(1, 6))
+                elements.append(ct)
+            if card.get("how_calculated"):
+                elements.append(Spacer(1, 6))
+                elements.append(Paragraph(f"<b>How it was worked out:</b> {card['how_calculated']}", body_style))
+            if card.get("explanation"):
+                elements.append(Paragraph(str(card["explanation"]), body_style))
+            elements.append(Spacer(1, 12))
+
         # Summary
         elements.append(Paragraph("<b>Executive Summary:</b>", styles["Heading3"]))
         elements.append(Paragraph(report_data.get("summary", ""), body_style))

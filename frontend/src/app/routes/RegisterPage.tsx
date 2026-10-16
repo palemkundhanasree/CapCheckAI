@@ -17,8 +17,8 @@ export const RegisterPage: React.FC = () => {
     setLoading(true);
     setError(null);
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      setError('Password must be at least 8 characters and include a letter and a number.');
       setLoading(false);
       return;
     }
@@ -121,10 +121,10 @@ export const RegisterPage: React.FC = () => {
               <input
                 type="password"
                 required
-                minLength={6}
+                minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
+                placeholder="At least 8 characters, with a letter and a number"
                 className="block w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
               />
             </div>

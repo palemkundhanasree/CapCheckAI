@@ -69,23 +69,34 @@ def main():
             continue
         print(f"\nProcessing Desktop Target at: {desktop}")
         
-        # 1. Primary: Separate 'CapCheck AI' folder
-        capcheck_dir = desktop / "CapCheck AI"
-        print(f" -> Syncing into separate folder '{capcheck_dir}' ...")
-        copy_tree(SOURCE_DIR, capcheck_dir)
-        print(f"    [OK] Synced {capcheck_dir}")
+        # 1. Update demo1_fixed (User target)
+        demo_dir = desktop / "demo1_fixed"
+        print(f" -> Syncing into '{demo_dir}' ...")
+        copy_tree(SOURCE_DIR, demo_dir)
+        print(f"    [OK] Synced {demo_dir}")
 
-        capcheck_zip = desktop / "CapCheck AI.zip"
-        print(f" -> Creating zip archive '{capcheck_zip}' ...")
-        create_zip(SOURCE_DIR, capcheck_zip)
-        print(f"    [OK] Created {capcheck_zip}")
+        demo_zip = desktop / "demo1_fixed.zip"
+        print(f" -> Creating zip archive '{demo_zip}' ...")
+        create_zip(SOURCE_DIR, demo_zip)
+        print(f"    [OK] Created {demo_zip}")
 
-        # 2. Preserve present workflow: test 4 folder & test 4.zip
+        # 2. Update test 4
         test4_dir = desktop / "test 4"
+        print(f" -> Syncing into '{test4_dir}' ...")
         copy_tree(SOURCE_DIR, test4_dir)
+        print(f"    [OK] Synced {test4_dir}")
+
         test4_zip = desktop / "test 4.zip"
+        print(f" -> Creating zip archive '{test4_zip}' ...")
         create_zip(SOURCE_DIR, test4_zip)
-        print(f"    [OK] Preserved workflow in 'test 4' and 'test 4.zip'")
+        print(f"    [OK] Created {test4_zip}")
+
+        # Also create test4 (no space) alias for safety
+        test4_nospace_dir = desktop / "test4"
+        copy_tree(SOURCE_DIR, test4_nospace_dir)
+        test4_nospace_zip = desktop / "test4.zip"
+        create_zip(SOURCE_DIR, test4_nospace_zip)
+        print(f"    [OK] Also mirrored to test4 and test4.zip")
 
     print("\nAll Desktop targets synced and zipped successfully!")
 

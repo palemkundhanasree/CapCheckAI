@@ -74,15 +74,15 @@ export const ClaimInput: React.FC<ClaimInputProps> = ({ onSubmit, isLoading }) =
           className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
         >
           <Send className="w-4 h-4" />
-          <span>{isLoading ? 'Verifying with Official Records...' : 'Verify Claim Now'}</span>
+          <span>{isLoading ? 'Checking sources...' : 'Verify Claim Now'}</span>
         </button>
       </form>
 
       {/* Preset Quick Test Buttons */}
       <div className="pt-4 border-t border-slate-100">
         <div className="flex items-center space-x-1.5 text-xs font-semibold text-slate-600 mb-2">
-          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-          <span>Click a pre-verified statement to test:</span>
+          <Sparkles className="w-3.5 h-3.5 text-orange-500" />
+          <span>Try an example (it is checked live, like any other claim):</span>
         </div>
         <div className="flex flex-wrap gap-2">
           {DEMO_PRESETS.map((demo) => (

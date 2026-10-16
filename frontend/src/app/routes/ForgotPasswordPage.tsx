@@ -11,6 +11,7 @@ export const ForgotPasswordPage: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
+  const [mailNotConfigured, setMailNotConfigured] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export const ForgotPasswordPage: React.FC = () => {
     try {
       const resp = await authService.forgotPassword(email);
       setSuccessMsg(resp.message || 'OTP reset code has been sent to your email.');
+      setMailNotConfigured(resp.email_delivery_configured === false);
       if (resp.dev_otp) {
         setDevOtpHint(resp.dev_otp);
         setOtp(resp.dev_otp);
@@ -42,8 +44,8 @@ export const ForgotPasswordPage: React.FC = () => {
     setLoading(true);
     setError(null);
 
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    if (newPassword.length < 8 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      setError('Password must be at least 8 characters and include a letter and a number.');
       setLoading(false);
       return;
     }
@@ -104,9 +106,15 @@ export const ForgotPasswordPage: React.FC = () => {
           </div>
         )}
 
+        {mailNotConfigured && !devOtpHint && (
+          <div className="p-3 rounded-lg bg-orange-50 border border-orange-200 text-xs text-orange-800">
+            Email delivery is not set up on this server yet, so no email was sent. The administrator needs to add SMTP settings to the .env file (see .env.example).
+          </div>
+        )}
+
         {devOtpHint && (
           <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-800">
-            <span className="font-semibold">Local Dev OTP Detected:</span> <code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono font-bold text-blue-900">{devOtpHint}</code> (also logged in backend storage/email_outbox.log)
+            <span className="font-semibold">Local development code:</span> <code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono font-bold text-blue-900">{devOtpHint}</code> (shown only because EXPOSE_DEV_OTP is on)
           </div>
         )}
 
@@ -125,7 +133,7 @@ export const ForgotPasswordPage: React.FC = () => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@capcheck.ai or your email"
+                  placeholder="admin@truthlens.ai or your email"
                   className="block w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600"
                 />
               </div>

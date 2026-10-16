@@ -73,7 +73,7 @@ def ensure_backend_venv():
     req_file = BACKEND_DIR / "requirements.txt"
     try:
         subprocess.check_call(
-            [str(VENV_PYTHON), "-c", "import fastapi, uvicorn, sqlalchemy, pydantic, PIL, reportlab"],
+            [str(VENV_PYTHON), "-c", "import fastapi, uvicorn, sqlalchemy, pydantic, PIL, reportlab, cv2, jose, bs4, httpx"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
@@ -113,9 +113,9 @@ def ensure_frontend_deps():
 
 def check_url_live(url, timeout=1.5):
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "TruthLens-Probe/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "CapCheck-Probe/1.0"})
         with urllib.request.urlopen(req, timeout=timeout) as res:
-            return res.status in (200, 304, 404)
+            return res.status in (200, 304)
     except Exception:
         return False
 
@@ -124,7 +124,8 @@ def run_services():
     print("\n[4/5] Launching CapCheck AI Services...", flush=True)
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(BACKEND_DIR)
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = str(BACKEND_DIR) + os.pathsep + str(ROOT_DIR) + ((os.pathsep + existing_pythonpath) if existing_pythonpath else "")
 
     # 1. Start FastAPI Backend if not already running
     backend_proc = None
@@ -134,7 +135,7 @@ def run_services():
         print("      - Starting Backend Server on http://127.0.0.1:8000...", flush=True)
         backend_proc = subprocess.Popen(
             [str(VENV_PYTHON), "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"],
-            cwd=str(BACKEND_DIR),
+            cwd=str(ROOT_DIR),
             env=env
         )
 
@@ -155,7 +156,14 @@ def run_services():
     backend_up = check_url_live("http://127.0.0.1:8000/api/v1/health")
     frontend_up = check_url_live("http://localhost:5173")
 
-    for _ in range(35):
+    for _ in range(60):
+        if backend_proc and backend_proc.poll() is not None:
+            print(f"\n[ERROR] Backend process terminated unexpectedly with exit code {backend_proc.poll()}!", flush=True)
+            break
+        if frontend_proc and frontend_proc.poll() is not None:
+            print(f"\n[ERROR] Frontend process terminated unexpectedly with exit code {frontend_proc.poll()}!", flush=True)
+            break
+
         if not backend_up:
             backend_up = check_url_live("http://127.0.0.1:8000/api/v1/health")
         if not frontend_up:
@@ -165,22 +173,37 @@ def run_services():
             break
         time.sleep(1.0)
 
-    print("\n" + "=" * 70, flush=True)
-    print("            CapCheck AI IS RUNNING SUCCESSFULLY!", flush=True)
-    print("=" * 70, flush=True)
-    print("\n  -> Web Application:        http://localhost:5173", flush=True)
-    print("  -> Swagger API Docs:       http://127.0.0.1:8000/docs", flush=True)
-    print("  -> Health Check:           http://127.0.0.1:8000/api/v1/health", flush=True)
-    print("  -> Default Admin Login:    admin@capcheck.ai / capcheck123", flush=True)
-    print("  -> Strict Verification:    >= 75% Source Verification Required for Real", flush=True)
-    print("\nPress Ctrl+C in this window at any time to stop both servers.", flush=True)
-    print("=" * 70 + "\n", flush=True)
+    # A crashed backend must never be reported as running
+    if backend_proc and backend_proc.poll() is not None:
+        backend_up = False
+    if frontend_proc and frontend_proc.poll() is not None:
+        frontend_up = False
 
-    # Open browser
-    try:
-        webbrowser.open("http://localhost:5173")
-    except Exception:
-        pass
+    if backend_up and frontend_up:
+        print("\n" + "=" * 70, flush=True)
+        print("            CapCheck AI IS RUNNING SUCCESSFULLY!", flush=True)
+        print("=" * 70, flush=True)
+        print("\n  -> Web Application:        http://localhost:5173", flush=True)
+        print("  -> Swagger API Docs:       http://127.0.0.1:8000/docs", flush=True)
+        print("  -> Health Check:           http://127.0.0.1:8000/api/v1/health", flush=True)
+        print("  -> Admin (first run only): admin@truthlens.ai / capcheck123  - change this password", flush=True)
+        print("\nPress Ctrl+C in this window at any time to stop both servers.", flush=True)
+        print("=" * 70 + "\n", flush=True)
+
+        # Open browser
+        try:
+            webbrowser.open("http://localhost:5173")
+        except Exception:
+            pass
+    else:
+        print("\n" + "=" * 70, flush=True)
+        print("          [WARNING] Startup Incomplete or Service Failed", flush=True)
+        print("=" * 70, flush=True)
+        if not backend_up:
+            print("  [!] Backend server is NOT responding on http://127.0.0.1:8000", flush=True)
+        if not frontend_up:
+            print("  [!] Frontend server is NOT responding on http://localhost:5173", flush=True)
+        print("=" * 70 + "\n", flush=True)
 
     # Keep alive until Ctrl+C
     try:
@@ -194,7 +217,7 @@ def run_services():
                 print("\n[WARNING] Frontend process exited unexpectedly.", flush=True)
                 break
     except KeyboardInterrupt:
-        print("\nStopping TruthLens AI services...", flush=True)
+        print("\nStopping CapCheck AI services...", flush=True)
     finally:
         for proc in [backend_proc, frontend_proc]:
             if proc:
@@ -206,7 +229,7 @@ def run_services():
                         proc.kill()
                     except Exception:
                         pass
-        print("All TruthLens AI services stopped cleanly.", flush=True)
+        print("All CapCheck AI services stopped cleanly.", flush=True)
 
 
 def main():

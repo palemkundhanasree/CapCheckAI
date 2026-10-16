@@ -8,6 +8,7 @@ from app.schemas.report import JobStatusResponse
 from app.workers.tasks import run_video_verification_task
 from app.security.file_validation import save_and_validate_upload
 from app.security.rate_limiter import rate_limit_dependency
+from app.security.authentication import require_user, TokenData
 
 router = APIRouter(tags=["Video Forensics"])
 
@@ -16,7 +17,8 @@ router = APIRouter(tags=["Video Forensics"])
 async def verify_video_endpoint(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: TokenData = Depends(require_user)
 ):
     """Uploads a video for frame extraction, deepfake detection, temporal jitter analysis, and audio check."""
     saved_path, detected_mime, file_size = await save_and_validate_upload(
@@ -32,7 +34,7 @@ async def verify_video_endpoint(
         "saved_path": str(saved_path),
         "file_size": file_size
     })
-    job = job_repo.create_job(job_type="video", input_data=input_meta)
+    job = job_repo.create_job(job_type="video", input_data=input_meta, user_id=user.uid)
 
     background_tasks.add_task(
         run_video_verification_task,

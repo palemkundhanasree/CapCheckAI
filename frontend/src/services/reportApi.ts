@@ -1,4 +1,4 @@
-import { request } from './apiClient';
+import { request, requestBlob } from './apiClient';
 import { VerificationReport } from '../types';
 
 export const reportApi = {
@@ -10,8 +10,9 @@ export const reportApi = {
       method: 'DELETE',
     }),
 
-  getPdfDownloadUrl: (reportId: string) =>
-    `/api/v1/reports/${reportId}/pdf`,
+  getPdfBlob: (reportId: string) => requestBlob(`/reports/${reportId}/pdf`),
+
+  getMediaBlob: (reportId: string) => requestBlob(`/reports/${reportId}/media`),
 
   getHistory: (limit = 25, offset = 0) =>
     request<VerificationReport[]>(`/history?limit=${limit}&offset=${offset}`),

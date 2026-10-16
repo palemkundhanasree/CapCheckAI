@@ -34,7 +34,8 @@ export const Navbar: React.FC = () => {
   const navLinks = [
     { to: '/', label: 'Home' },
     { to: '/verify', label: 'Verify News' },
-    { to: '/about', label: 'How It Works' },
+    { to: '/#how-it-works', label: 'How It Works' },
+    { to: '/about', label: 'About' },
     { to: '/history', label: 'History' },
   ];
 
@@ -58,8 +59,8 @@ export const Navbar: React.FC = () => {
 
         {/* Center Nav Links */}
         <nav className="hidden md:flex items-center space-x-1">
-          {navLinks.map((item) => {
-            const isActive = location.pathname === item.to;
+          {user && navLinks.map((item) => {
+            const isActive = item.to.includes('#') ? false : location.pathname === item.to;
             return (
               <Link
                 key={item.to}
@@ -111,13 +112,15 @@ export const Navbar: React.FC = () => {
                   >
                     My History
                   </Link>
-                  <Link
-                    to="/admin"
-                    onClick={() => setUserMenuOpen(false)}
-                    className="block px-4 py-2 text-xs text-slate-700 hover:bg-slate-50"
-                  >
-                    System Admin
-                  </Link>
+                  {user.role === 'admin' && (
+                    <Link
+                      to="/admin"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="block px-4 py-2 text-xs text-slate-700 hover:bg-slate-50"
+                    >
+                      System Admin
+                    </Link>
+                  )}
                   <button
                     onClick={handleLogout}
                     className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center space-x-1.5 cursor-pointer"
@@ -145,12 +148,12 @@ export const Navbar: React.FC = () => {
             </div>
           )}
 
-          <Link
+          {user && <Link
             to="/verify"
             className="hidden sm:inline-flex items-center justify-center px-3.5 py-1.5 rounded-md text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 transition-colors"
           >
             Verify Now
-          </Link>
+          </Link>}
         </div>
       </div>
     </header>

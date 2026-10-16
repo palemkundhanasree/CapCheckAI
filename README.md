@@ -221,3 +221,32 @@ pytest tests/ -v
 
 ## 10. License
 This project is licensed under the [MIT License](LICENSE).
+
+
+## Accounts, sign-in and email codes
+
+The whole site requires an account. Visitors are sent to the sign-in page; each person only sees their own history and reports.
+
+* Sign in with **password** or with a **6-digit code emailed to you**.
+* **Forgot password** emails a 6-digit code (valid 10 minutes, one use, 5 attempts) and lets you set a new password.
+* Passwords need at least 8 characters with a letter and a number.
+
+### Turn on email delivery (required for codes to arrive)
+
+Codes can only be emailed once SMTP settings are added to `.env`:
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=you@gmail.com
+SMTP_PASSWORD=<16-character Google App Password>
+SMTP_FROM=you@gmail.com
+```
+
+Without them the app says plainly that no email was sent. For local testing only, set `EXPOSE_DEV_OTP=true` to show the code on screen; codes are also written to `storage/email_outbox.log`.
+
+## How verdicts are produced
+
+* **Claims / articles:** curated fact-check records, Google Fact Check API (if `GOOGLE_FACTCHECK_API_KEY` is set), and live news search (GDELT, Google News). Found articles are opened and the matching sentence is shown as evidence. Encyclopedia pages are shown as background only and never count as proof.
+* **Images / video / audio:** forensic checks (metadata, error-level analysis, frequency and noise analysis, temporal consistency). A caption you add to an image, and speech transcribed from audio/video (needs `pip install openai-whisper`), are fact-checked the same way.
+* The result page lists every source with its effect on the score. Checks that could not run (no API key, no network, no Whisper, no reverse-image service) are listed as unavailable instead of being faked.

@@ -20,16 +20,14 @@ def inspect_audio_metadata(file_path: Path) -> Dict[str, Any]:
             # Look for common AI voice and TTS generator signatures
             tts_markers = [
                 (b"ElevenLabs", "ElevenLabs Voice Synthesis"),
-                (b"Tortoise", "Tortoise TTS Model"),
-                (b"Bark", "Suno Bark Audio Model"),
+                (b"Tortoise-TTS", "Tortoise TTS Model"),
                 (b"Coqui", "Coqui TTS Engine"),
-                (b"openai", "OpenAI Audio Engine"),
                 (b"gTTS", "Google Text-To-Speech"),
                 (b"pyttsx3", "Python TTS Library")
             ]
 
             for marker, description in tts_markers:
-                if marker.lower() in chunk.lower():
+                if marker in chunk:  # case-sensitive to avoid accidental matches in binary audio
                     signatures.append(f"Synthetic speech engine signature identified: {description}")
                     metadata["is_synthetic_tag_found"] = True
                     metadata["encoder"] = description

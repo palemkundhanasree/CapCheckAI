@@ -9,6 +9,7 @@ from app.schemas.report import JobStatusResponse
 from app.workers.tasks import run_image_verification_task
 from app.security.file_validation import save_and_validate_upload
 from app.security.rate_limiter import rate_limit_dependency
+from app.security.authentication import require_user, TokenData
 
 router = APIRouter(tags=["Image Forensics"])
 
@@ -18,7 +19,8 @@ async def verify_image_endpoint(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     context: Optional[str] = Form(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: TokenData = Depends(require_user)
 ):
     """Uploads an image for forensic inspection, AI-generation detection, and ELA tampering check."""
     saved_path, detected_mime, file_size = await save_and_validate_upload(
@@ -35,7 +37,7 @@ async def verify_image_endpoint(
         "file_size": file_size,
         "context": context
     })
-    job = job_repo.create_job(job_type="image", input_data=input_meta)
+    job = job_repo.create_job(job_type="image", input_data=input_meta, user_id=user.uid)
 
     background_tasks.add_task(
         run_image_verification_task,

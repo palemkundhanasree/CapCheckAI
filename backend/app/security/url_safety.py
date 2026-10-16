@@ -50,9 +50,6 @@ def validate_url_safety(url: str) -> str:
     try:
         resolved_addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
     except socket.gaierror:
-        from app.config import settings
-        if getattr(settings, "DEMO_MODE", True):
-            return url
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Could not resolve host '{hostname}'. Check the URL or your network connection."
@@ -82,7 +79,7 @@ async def safe_fetch_url(url: str, max_bytes: int = 5 * 1024 * 1024, timeout_sec
     safe_url = validate_url_safety(url)
 
     headers = {
-        "User-Agent": "CapCheck-AI-FactCheck-Bot/1.0 (+https://capcheck.ai/bot; verification-research)",
+        "User-Agent": "Mozilla/5.0 (compatible; CapCheck-AI/1.0; verification-research)",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
     }

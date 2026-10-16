@@ -1,6 +1,6 @@
 from enum import Enum
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, Any
 
 
 class FactualVerdictType(str, Enum):
@@ -44,3 +44,6 @@ class VerdictSynthesis(BaseModel):
     context_verdict: Optional[str] = None
     summary: str
     explanation: str
+    correctness_score: Optional[float] = None
+    correctness_explanation: str = ""
+    report_card: Optional[Dict[str, Any]] = None

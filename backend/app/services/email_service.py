@@ -1,11 +1,13 @@
-import os
-import random
-import smtplib
+import hashlib
+import hmac
 import logging
+import secrets
+import smtplib
+import ssl
 from datetime import datetime
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from pathlib import Path
+from email.mime.text import MIMEText
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -14,94 +16,89 @@ EMAIL_LOG_FILE = settings.STORAGE_DIR / "email_outbox.log"
 
 
 def generate_otp() -> str:
-    """Generates a secure 6-digit numeric OTP."""
-    return f"{random.randint(100000, 999999)}"
+    """Generates a cryptographically secure 6-digit numeric one-time code."""
+    return f"{secrets.randbelow(900000) + 100000}"
 
 
-def send_otp_email(recipient_email: str, otp_code: str, user_name: str = "User") -> bool:
+def hash_otp(email: str, otp: str) -> str:
+    """OTPs are never stored in plain text; they are salted with the account email and the server secret."""
+    return hashlib.sha256(f"{settings.SECRET_KEY}:{email.lower()}:{otp}".encode("utf-8")).hexdigest()
+
+
+def otp_matches(email: str, otp: str, stored_hash: str) -> bool:
+    return hmac.compare_digest(hash_otp(email, otp.strip()), stored_hash or "")
+
+
+def smtp_configured() -> bool:
+    return bool(settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD)
+
+
+def send_otp_email(recipient_email: str, otp_code: str, user_name: str = "User", purpose: str = "reset") -> str:
     """
-    Sends an OTP verification email to the user.
-    If SMTP server is configured in settings or environment, delivers via real SMTP.
-    Always logs to storage/email_outbox.log and console for seamless offline/dev testing.
+    Emails a one-time code through the configured SMTP server.
+
+    Returns "sent", "not_configured" or "failed". When SMTP is not configured the
+    code is written to storage/email_outbox.log so a developer can complete the flow
+    locally; it is never claimed to have been delivered.
     """
-    subject = f"Your CapCheck AI Password Reset Code: {otp_code}"
-    
+    ttl = settings.OTP_TTL_MINUTES
+    if purpose == "login":
+        subject = "Your CapCheck AI sign-in code"
+        intro = "Use this code to sign in to CapCheck AI:"
+    else:
+        subject = "Your CapCheck AI password reset code"
+        intro = "Use this code to reset your CapCheck AI password:"
+
     html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a; }}
-            .container {{ max-width: 500px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 32px; }}
-            .brand {{ font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 24px; }}
-            .otp-box {{ background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 18px; text-align: center; margin: 24px 0; }}
-            .otp-code {{ font-size: 32px; font-weight: 900; letter-spacing: 6px; color: #2563eb; font-family: monospace; }}
-            .footer {{ font-size: 12px; color: #64748b; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 16px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="brand">CapCheck AI</div>
-            <p>Hello {user_name},</p>
-            <p>You requested a one-time verification code to reset your password. Use the 6-digit code below to complete your reset:</p>
-            <div class="otp-box">
-                <div class="otp-code">{otp_code}</div>
-            </div>
-            <p>This code is valid for <strong>15 minutes</strong>. If you did not request this code, you can safely ignore this email.</p>
-            <div class="footer">
-                &copy; {datetime.utcnow().year} CapCheck AI. Trusted Fact-Checking & Media Verification.
-            </div>
-        </div>
-    </body>
-    </html>
-    """
+    <div style="font-family:Inter,Arial,sans-serif;background:#f8f7f4;padding:24px;color:#0f1f3d">
+      <div style="max-width:480px;margin:0 auto;background:#fff;border:1px solid #e3e1da;border-radius:8px;padding:28px">
+        <div style="font-size:18px;font-weight:700;margin-bottom:16px">CapCheck AI</div>
+        <p style="margin:0 0 8px">Hello {user_name},</p>
+        <p style="margin:0 0 16px">{intro}</p>
+        <div style="background:#f3f2ee;border:1px solid #e3e1da;border-radius:6px;padding:16px;text-align:center;
+                    font-size:30px;font-weight:700;letter-spacing:8px;font-family:monospace">{otp_code}</div>
+        <p style="margin:16px 0 0;font-size:14px">This code expires in {ttl} minutes and can be used once.
+        If you did not request it, you can ignore this email; your account is unchanged.</p>
+        <p style="margin:16px 0 0;font-size:12px;color:#6b7280">&copy; {datetime.utcnow().year} CapCheck AI</p>
+      </div>
+    </div>"""
+    plain_content = (
+        f"Hello {user_name},\n\n{intro} {otp_code}\n\n"
+        f"The code expires in {ttl} minutes and can be used once. "
+        f"If you did not request it, ignore this email.\n\nCapCheck AI"
+    )
 
-    plain_content = f"""
-    Hello {user_name},
-
-    Your CapCheck AI password reset code is: {otp_code}
-    This code is valid for 15 minutes.
-
-    If you did not request this, please ignore this email.
-    CapCheck AI Team
-    """
-
-    # 1. Log to outbox file
-    try:
-        EMAIL_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(EMAIL_LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.utcnow().isoformat()}] TO: {recipient_email} | OTP: {otp_code} | SUBJECT: {subject}\n")
-    except Exception as e:
-        logger.warning(f"Could not append to email log: {e}")
-
-    logger.info(f"==> [EMAIL DISPATCH] Password reset OTP for {recipient_email}: {otp_code}")
-
-    # 2. Check if SMTP configuration exists in environment
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM", "noreply@capcheck.ai")
-
-    if smtp_host and smtp_user and smtp_password:
+    if not smtp_configured():
         try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = f"CapCheck AI <{smtp_from}>"
-            msg["To"] = recipient_email
-            msg.attach(MIMEText(plain_content, "plain"))
-            msg.attach(MIMEText(html_content, "html"))
+            EMAIL_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(EMAIL_LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.utcnow().isoformat()}] (NOT SENT - SMTP not configured) TO: {recipient_email} | CODE: {otp_code} | {subject}\n")
+        except Exception as e:
+            logger.warning(f"Could not append to email outbox log: {e}")
+        logger.warning("SMTP is not configured; code for %s written to storage/email_outbox.log only.", recipient_email)
+        return "not_configured"
 
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-                server.starttls()
-                server.login(smtp_user, smtp_password)
-                server.sendmail(smtp_from, [recipient_email], msg.as_string())
-            logger.info(f"Successfully delivered OTP email to {recipient_email} via SMTP.")
-            return True
-        except Exception as err:
-            logger.error(f"Failed to deliver SMTP email to {recipient_email}: {err}")
-            # Non-fatal: local outbox still recorded it
-            return False
+    sender = settings.SMTP_FROM or settings.SMTP_USER
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"CapCheck AI <{sender}>"
+        msg["To"] = recipient_email
+        msg.attach(MIMEText(plain_content, "plain"))
+        msg.attach(MIMEText(html_content, "html"))
 
-    return True
+        if settings.SMTP_USE_SSL or settings.SMTP_PORT == 465:
+            with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15,
+                                  context=ssl.create_default_context()) as server:
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                server.sendmail(sender, [recipient_email], msg.as_string())
+        else:
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
+                server.starttls(context=ssl.create_default_context())
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                server.sendmail(sender, [recipient_email], msg.as_string())
+        logger.info("Delivered %s code to %s via SMTP.", purpose, recipient_email)
+        return "sent"
+    except Exception as err:
+        logger.error("SMTP delivery to %s failed: %s", recipient_email, err)
+        return "failed"

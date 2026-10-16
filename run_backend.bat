@@ -25,7 +25,7 @@ if not exist ".env" (
     copy .env.example .env >nul
 )
 
-"%RUNNER%" -c "import sys; sys.path.insert(0, 'backend'); from app.db.session import init_db; init_db()" >nul 2>&1
+"%RUNNER%" -c "import sys; sys.path.insert(0, 'backend'); from app.db.session import init_db; init_db()"
 
 echo ======================================================================
 echo           CapCheck AI - Backend Server (Port 8000)

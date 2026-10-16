@@ -12,5 +12,5 @@ def evaluate_speaker_consistency(waveform: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "speaker_consistency_score": round(max(100.0 - (energy_var * 400), 40.0), 1),
         "splicing_detected": is_spliced,
-        "note": "Speaker timbre remains uniform across segmented intervals." if not is_spliced else "Potential splicing boundary detected."
+        "note": "No abrupt loudness jumps that would suggest cuts (a basic check; speaker identity is not compared)." if not is_spliced else "Potential splicing boundary detected."
     }

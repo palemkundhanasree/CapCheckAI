@@ -55,16 +55,20 @@ export const ImageAnalysis: React.FC<ImageAnalysisProps> = ({ analysis }) => {
         <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
           <div className="text-xs text-slate-500 font-medium uppercase tracking-wider">2. Error Level Analysis (ELA)</div>
           <div className="text-sm font-bold text-slate-900">
-            {visual.ela?.splicing_detected ? (
-              <span className="text-red-700">Possible Splicing / Compositing</span>
+            {visual.ela?.applicable === false ? (
+              <span className="text-slate-600">Not applicable</span>
+            ) : visual.ela?.splicing_detected ? (
+              <span className="text-orange-700">Possible Pasted / Edited Region</span>
             ) : (
-              <span className="text-green-700">Uniform Compression Canvas</span>
+              <span className="text-green-700">Uniform Compression</span>
             )}
           </div>
           <p className="text-xs text-slate-500 leading-snug">
-            {visual.ela?.splicing_detected
-              ? 'Inconsistent compression error rates detected along boundary contours.'
-              : 'Consistent compression noise across the entire image frame.'}
+            {visual.ela?.applicable === false
+              ? (visual.ela?.note || 'This test only works on JPEG photos, so it was skipped.')
+              : visual.ela?.splicing_detected
+                ? 'A few small regions react to re-compression differently from the rest. This is a hint, not proof: freshly resized or heavily edited photos can do this too.'
+                : 'No region reacted to re-compression differently from the rest of the image.'}
           </p>
         </div>
 

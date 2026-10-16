@@ -2,25 +2,52 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { History, Search, FileText, Globe, Image as ImageIcon, Film, Volume2, ArrowRight, Trash2, Download } from 'lucide-react';
 import { reportApi } from '../../services/reportApi';
+import { ApiError } from '../../services/apiClient';
 import { VerificationReport } from '../../types';
+import { verdictTone } from '../../components/VerdictCard';
 
 export const HistoryPage: React.FC = () => {
   const [reports, setReports] = useState<VerificationReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [error, setError] = useState<string | null>(null);
 
   const fetchHistory = () => {
     setLoading(true);
+    setError(null);
     reportApi.getHistory(50)
-      .then(setReports)
-      .catch(() => setReports([]))
+      .then((data) => setReports(Array.isArray(data) ? data : []))
+      .catch((err: unknown) => {
+        setReports([]);
+        setError(err instanceof ApiError || err instanceof Error
+          ? err.message
+          : 'Could not load your history.');
+      })
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     fetchHistory();
   }, []);
+
+  const handleDownload = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const blob = await reportApi.getPdfBlob(id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `CapCheck_Report_${id.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not download the report.');
+    }
+  };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
@@ -35,8 +62,9 @@ export const HistoryPage: React.FC = () => {
   };
 
   const filtered = reports.filter((r) => {
-    const matchesSearch = r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          r.summary.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = (r.title || '').toLowerCase().includes(term) ||
+                          (r.summary || '').toLowerCase().includes(term);
     const matchesType = typeFilter === 'ALL' || r.input_type === typeFilter;
     return matchesSearch && matchesType;
   });
@@ -56,14 +84,10 @@ export const HistoryPage: React.FC = () => {
     }
   };
 
-  const getVerdictStyle = (label: string) => {
-    const l = (label || '').toLowerCase();
-    if (l.includes('true') || l.includes('supported') || l.includes('real') || l.includes('verified')) {
-      return 'bg-green-100 text-green-800 border-green-200';
-    }
-    if (l.includes('false') || l.includes('contradicted') || l.includes('ai-') || l.includes('fake')) {
-      return 'bg-red-100 text-red-800 border-red-200';
-    }
+  const getVerdictStyle = (overall: string) => {
+    const tone = verdictTone(overall);
+    if (tone === 'green') return 'bg-green-100 text-green-800 border-green-200';
+    if (tone === 'red') return 'bg-red-100 text-red-800 border-red-200';
     return 'bg-orange-100 text-orange-800 border-orange-200';
   };
 
@@ -135,6 +159,17 @@ export const HistoryPage: React.FC = () => {
         <div className="py-20 text-center text-slate-500 text-xs">
           Loading past verification records...
         </div>
+      ) : error ? (
+        <div className="text-center py-14 bg-white rounded-lg border border-red-200 space-y-3">
+          <h3 className="text-sm font-semibold text-red-700">Could not load your history</h3>
+          <p className="text-xs text-slate-600 max-w-md mx-auto">{error}</p>
+          <button
+            onClick={fetchHistory}
+            className="inline-flex items-center px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-700 text-white text-xs font-medium cursor-pointer"
+          >
+            Try again
+          </button>
+        </div>
       ) : filtered.length > 0 ? (
         <div className="space-y-3">
           {filtered.map((r) => (
@@ -149,7 +184,9 @@ export const HistoryPage: React.FC = () => {
                     {getTypeBadge(r.input_type)}
                     <span className="text-slate-300">•</span>
                     <span className="text-xs text-slate-400 font-medium">
-                      {new Date(r.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {Number.isNaN(new Date(r.created_at).getTime())
+                        ? ''
+                        : new Date(r.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
                   </div>
                   <h3 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1">
@@ -162,24 +199,25 @@ export const HistoryPage: React.FC = () => {
 
                 <div className="flex items-center space-x-4 flex-shrink-0">
                   <div className="text-right">
-                    <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-semibold border ${getVerdictStyle(r.verdict_label)}`}>
+                    <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-semibold border ${getVerdictStyle(r.overall_verdict)}`}>
                       {r.verdict_label}
                     </span>
                     <div className="text-[11px] text-slate-500 font-medium mt-1">
-                      {Math.round(r.confidence_score)}% Confidence
+                      {r.correctness_score != null ? `${Math.round(r.correctness_score)}% likely correct` : `${Math.round(r.confidence_score || 0)}% confidence`}
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
-                    <a
-                      href={reportApi.getPdfDownloadUrl(r.id)}
-                      download
+                    <button
+                      type="button"
+                      onClick={(e) => handleDownload(e, r.id)}
                       title="Download PDF"
-                      className="p-2 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                      className="p-2 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                     >
                       <Download className="w-4 h-4" />
-                    </a>
+                    </button>
                     <button
+                      type="button"
                       onClick={(e) => handleDelete(e, r.id)}
                       title="Delete Report"
                       className="p-2 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"

@@ -48,7 +48,7 @@ export const ConfidenceMeter: React.FC<ConfidenceMeterProps> = ({ score, level, 
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
           <Shield className="w-4 h-4 text-blue-600" />
-          <h3 className="text-sm font-semibold text-slate-900">CapCheck Confidence Score (≥75% Rule)</h3>
+          <h3 className="text-sm font-semibold text-slate-900">CapCheck Confidence Score</h3>
         </div>
         <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${style.badge}`}>
           {style.text}

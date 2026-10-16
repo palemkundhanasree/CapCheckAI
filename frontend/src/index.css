@@ -4,9 +4,9 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 font-sans antialiased selection:bg-blue-600 selection:text-white;
-    background-color: #f8fafc;
-    color: #0f172a;
+    @apply text-slate-900 font-sans antialiased selection:bg-blue-600 selection:text-white;
+    background-color: #f8f7f4;
+    color: #0f1f3d;
   }
 }
 

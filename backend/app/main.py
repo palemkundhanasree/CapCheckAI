@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import settings, ROOT_DIR
+from app.config import settings
 from app.db.session import init_db
 from app.security.retention import cleanup_expired_files
 
@@ -25,7 +25,7 @@ logging.basicConfig(
     level=logging.INFO if not settings.DEBUG else logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
-logger = logging.getLogger("capcheck")
+logger = logging.getLogger("truthlens")
 
 
 @asynccontextmanager
@@ -46,20 +46,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-origins = [
-    "https://capcheckai.netlify.app",
-    "https://*.netlify.app",
-    "http://localhost:3000",
-    "http://localhost:5173",
-]
-
-# CORS Middleware configured for local development and Netlify cloud deployments
+# CORS Middleware configured strictly for development frontend origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS if settings.CORS_ORIGINS != ["*"] else ["*"],
-    allow_origin_regex=r"^https:\/\/.*\.netlify\.app$" if settings.CORS_ORIGINS != ["*"] else None,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -86,37 +78,13 @@ app.include_router(reports_router, prefix=prefix)
 app.include_router(history_router, prefix=prefix)
 app.include_router(admin_router, prefix=prefix)
 
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
-# Mount uploads directory for media streaming
-if settings.UPLOAD_DIR.exists():
-    app.mount("/static/uploads", StaticFiles(directory=str(settings.UPLOAD_DIR)), name="uploads")
-
-# Frontend static asset & SPA serving
-frontend_dist = ROOT_DIR / "frontend" / "dist"
-if frontend_dist.exists() and (frontend_dist / "assets").exists():
-    app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
-
-    @app.get("/", include_in_schema=False)
-    async def serve_index():
-        return FileResponse(str(frontend_dist / "index.html"))
-
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(request: Request, full_path: str):
-        if full_path.startswith("api/") or full_path.startswith("docs") or full_path == "openapi.json":
-            return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": "Not found"})
-        target_file = frontend_dist / full_path
-        if full_path and target_file.is_file():
-            return FileResponse(str(target_file))
-        return FileResponse(str(frontend_dist / "index.html"))
-else:
-    @app.get("/")
-    async def root():
-        return {
-            "name": settings.PROJECT_NAME,
-            "version": settings.VERSION,
-            "docs_url": "/docs",
-            "api_v1": settings.API_V1_PREFIX,
-            "demo_mode": settings.DEMO_MODE
-        }
+@app.get("/")
+async def root():
+    return {
+        "name": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "docs_url": "/docs",
+        "api_v1": settings.API_V1_PREFIX,
+        "demo_mode": settings.DEMO_MODE
+    }

@@ -272,7 +272,8 @@ async def query_google_factcheck_api(query: str) -> List[Dict[str, Any]]:
                             "publish_date": review.get("reviewDate", ""),
                             "snippet": f"Rating: {review.get('textualRating', 'Unrated')}. Claim assessed: '{claim_item.get('text')}'.",
                             "stance": map_rating_to_stance(review.get("textualRating", "")),
-                            "credibility_score": rep["reliability"]
+                            "credibility_score": rep["reliability"],
+                            "kind": "factcheck"
                         })
                 return results
     except Exception as e:
@@ -281,41 +282,47 @@ async def query_google_factcheck_api(query: str) -> List[Dict[str, Any]]:
     return []
 
 
+NEGATION = re.compile(r"\b(not|no|never|isn't|isnt|aren't|arent|doesn't|doesnt|don't|dont|didn't|didnt|cannot|can't|cant|won't|wont|false|fake|myth|hoax)\b")
+
+
 def search_curated_factchecks(query: str) -> List[Dict[str, Any]]:
-    """Matches query against curated verified checks using phrases and keywords."""
+    """
+    Matches the claim against the built-in list of well-documented facts and debunked hoaxes.
+    Matching needs an exact key phrase or nearly all key words, and a negated claim
+    ("the Earth does NOT orbit the Sun") flips the stance instead of being confirmed.
+    """
     query_lower = query.lower()
-    query_clean = re.sub(r"[^\w\s]", "", query_lower)
+    query_clean = re.sub(r"[^\w\s%]", "", query_lower)
     query_words = set(query_clean.split())
+    negated = bool(NEGATION.search(query_clean))
     matches = []
 
     for item in CURATED_FACT_CHECKS:
-        matched = False
-
-        # 1. Direct phrase matching
-        for phrase in item.get("query_phrases", []):
-            if phrase in query_lower:
-                matched = True
-                break
-
-        # 2. Keyword set matching
+        matched = any(phrase in query_lower for phrase in item.get("query_phrases", []))
         if not matched:
             kws = set(item.get("query_keywords", []))
             overlap = len(kws.intersection(query_words))
-            if overlap >= len(kws) or overlap >= 2:
-                matched = True
+            matched = len(kws) >= 3 and overlap / len(kws) >= 0.8
 
         if matched:
             rev = item["review"]
             rep = lookup_source_reputation(rev["url"])
+            stance = map_rating_to_stance(rev["textualRating"])
+            note = ""
+            if negated and stance in ("SUPPORTS", "CONTRADICTS"):
+                # The claim says the opposite of the documented statement
+                stance = "CONTRADICTS" if stance == "SUPPORTS" else "SUPPORTS"
+                note = f" (Your statement is the negation of the documented claim: \"{item['claim']}\")"
             matches.append({
                 "title": rev["title"],
                 "source_name": rev["publisher"],
                 "source_url": rev["url"],
                 "publisher": rev["publisher"],
                 "publish_date": rev["date"],
-                "snippet": f"Rating: {rev['textualRating']}. {rev['snippet']}",
-                "stance": map_rating_to_stance(rev["textualRating"]),
-                "credibility_score": rep["reliability"]
+                "snippet": f"Rating: {rev['textualRating']}. {rev['snippet']}{note}",
+                "stance": stance,
+                "credibility_score": rep["reliability"],
+                "kind": "factcheck",
             })
 
     return matches
